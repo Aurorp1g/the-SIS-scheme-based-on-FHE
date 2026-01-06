@@ -54,7 +54,7 @@ public:
     this->batches = ((L * W % k == 0) ? L * W / k : (L * W - L * W % k + k) / k);
   }
   int* getSize() {
-    int siz[] = { L,W };
+    static int siz[2] = { L,W };
     return siz;
   }
 
@@ -171,7 +171,6 @@ public:
     Ciphertext tem;
     modP = parms.getP();
     size_t slot_count = encoder.slot_count();
-    size_t row_size = slot_count / 2;
 
     vector<int64_t> ONE(slot_count, 0LL);
     vector<int64_t> ZERO(slot_count, 0LL);
@@ -298,7 +297,7 @@ public:
         //cout << tem_de.to_dec_string() << endl;
         ans_fl.push_back(temAns.to_double());
       }
-      catch (invalid_argument e) {
+      catch (const std::invalid_argument& e) {
         evaluator.sub(zeros_en, a[i], en1);
         check1(decryptor, en1);
         decryptor.decrypt(en1, text1);
@@ -310,7 +309,7 @@ public:
           temAns.divrem(temP, temAns);
           ans_fl.push_back(temAns.to_double());
         }
-        catch (invalid_argument e) {
+        catch (const std::invalid_argument& e) {
           ans_fl.push_back(0);
         }
       }
@@ -471,6 +470,7 @@ public:
     norm.realError = cal_err(norm.realErrorData);
     cout << endl;
     printError(norm.realError);
+    return norm.realError.mean;
   }
 
 private:
@@ -522,15 +522,17 @@ public:
   }
 
   Ciphertext& addNewPixByCipher(vector<Ciphertext>y, Evaluator& evaluator, RelinKeys& rk, int index = 0) {
-    Ciphertext tem = y[0], tem2;
+    static Ciphertext result;
+    result = y[0];
+    Ciphertext tem2;
     for (int i = 1; i < y.size(); i++) {
       evaluator.exponentiate(x_en[index], i, rk, tem2);
       evaluator.multiply_inplace(tem2, y[i]);
-      evaluator.add_inplace(tem, tem2);
+      evaluator.add_inplace(result, tem2);
     }
     evaluator.relinearize_inplace(tem2, rk);
-    fx_en.push_back(tem);
-    return tem;
+    fx_en.push_back(result);
+    return result;
   }
 
   Ciphertext generateCKKSShares(vector<Ciphertext>y, Evaluator& evaluator, RelinKeys& rk, shared_ptr<seal::SEALContext>& context,vector<Ciphertext>& ONES) {
@@ -650,4 +652,3 @@ public:
   long long KT[64 * 64];
   long long invKT[64 * 64];
 };
-

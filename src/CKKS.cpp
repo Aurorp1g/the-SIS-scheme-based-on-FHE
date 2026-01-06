@@ -490,7 +490,7 @@ int main_test() {
   vector<double> ans;
   encoder.decode(TWO, ans);
   cout << ans[1];
-
+  return 0;
 }
 
 /// <summary>
@@ -575,6 +575,7 @@ int main_bfv() {
     }
   }
   datain.close();
+  return 0;
 }
 
 /// <summary>
@@ -686,6 +687,7 @@ int main(){
     }
    }
   datain.close();
+  return 0;
 }
 
 //
@@ -870,4 +872,5 @@ int main_BFV() {
     }
   }
   datain.close();
+  return 0;
 }

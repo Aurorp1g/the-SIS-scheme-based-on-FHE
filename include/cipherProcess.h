@@ -70,7 +70,7 @@ void getShareByHE(size_t x, uint16_t plain_m, Picture& source,
       temy.push_back(pix_en[index * parms.getk() + i]);
     }
     for (int pn = 0; pn < shares.size(); pn++) {
-      Ciphertext& Tem = shares[pn].addNewPixByCipher(temy, evaluator, relin_keys,index);
+      shares[pn].addNewPixByCipher(temy, evaluator, relin_keys,index);
       //getNoise(decryptor, Tem);
     }
   }
@@ -490,7 +490,6 @@ void getShareByBFV(size_t x, Picture& source, vector<SharePic>& shares,
   Decryptor decryptor(context, skt);
   BatchEncoder encoder(context);
   size_t slot_count = encoder.slot_count();
-  size_t row_size = slot_count / 2;
 
   vector<double> y = source.getSecFromDouble();
   vector<int64_t> pixes[6];
@@ -596,7 +595,6 @@ Picture recoryShareBFV(Params& picParms, vector<SharePic>& uploadShares, DecTool
   BatchEncoder encoder(context);
   Plaintext tem;
   size_t slot_count = encoder.slot_count();
-  size_t row_size = slot_count / 2;
 
   double dur;
   clock_t start, end;

@@ -27,16 +27,16 @@ void print_vec(vector<double>&vec,int num,int pres=4) {
   old_fmt.copyfmt(cout);
   cout << fixed << setprecision(pres);
 
-  int len = num * 2;
+  size_t len = num * 2;
   if (vec.size() <= len) {
     vec.resize(len + 1);
   }
   cout << "[";
-  for (int i = 0; i < num; i++) {
+  for (size_t i = 0; i < (size_t)num; i++) {
     cout << vec[i] << ", ";
   }
   cout << "..., ";
-  for (int i = vec.size() - num; i < vec.size(); i++) {
+  for (size_t i = vec.size() - num; i < vec.size(); i++) {
     cout << vec[i] << ", ";
   }
   cout << "]" << endl;
@@ -48,16 +48,16 @@ void print_vec(vector<int>& vec, int num, int pres = 4) {
   old_fmt.copyfmt(cout);
   cout << fixed << setprecision(pres);
 
-  int len = num * 2;
+  size_t len = num * 2;
   if (vec.size() <= len) {
     vec.resize(len + 1);
   }
   cout << "[";
-  for (int i = 0; i < num; i++) {
+  for (size_t i = 0; i < (size_t)num; i++) {
     cout << vec[i] << ", ";
   }
   cout << "..., ";
-  for (int i = vec.size() - num; i < vec.size(); i++) {
+  for (size_t i = vec.size() - num; i < vec.size(); i++) {
     cout << vec[i] << ", ";
   }
   cout << "]" << endl;
@@ -82,7 +82,7 @@ void PrintDeVec(Decryptor& decryptor, CKKSEncoder& encoder, Ciphertext& en) {
 void PrintDeVec(Decryptor& decryptor, CKKSEncoder& encoder, vector<Ciphertext>& en, int tag = 1,int num=4) {
   Plaintext plain;
   vector<double> temAns;
-  for (int i = 0; i < en.size(); i++) {
+  for (size_t i = 0; i < en.size(); i++) {
     decryptor.decrypt(en[i], plain);
     encoder.decode(plain, temAns);
     if (tag) {
@@ -98,32 +98,32 @@ void PrintDeVec(Decryptor& decryptor, CKKSEncoder& encoder, vector<Ciphertext>& 
 Error cal_err(vector<double>& vec) {
   Error err;
   err.maxn = err.var = err.total = 0;
-  for (int i = 0; i < vec.size(); i++) {
+  for (size_t i = 0; i < vec.size(); i++) {
     err.total += vec[i];
     err.maxn = max(fabs((double)vec[i]), err.maxn);
   }
   err.mean = err.total / vec.size();
-  for (int i = 0; i < vec.size(); i++) {
+  for (size_t i = 0; i < vec.size(); i++) {
     err.var += pow(vec[i]-err.mean, 2);
   }
   err.var /= vec.size();
-  err.dataScale = vec.size();
+  err.dataScale = (int)vec.size();
   return err;
 }
 
 Error cal_err(vector<int> vec) {
   Error err;
   err.maxn = err.var = err.total = 0;
-  for (int i = 0; i < vec.size(); i++) {
+  for (size_t i = 0; i < vec.size(); i++) {
     err.total += vec[i];
     err.maxn = max((double)vec[i], err.maxn);
   }
   err.mean = err.total / vec.size();
-  for (int i = 0; i < vec.size(); i++) {
+  for (size_t i = 0; i < vec.size(); i++) {
     err.var += pow(vec[i] - err.mean, 2);
   }
   err.var /= vec.size();
-  err.dataScale = vec.size();
+  err.dataScale = (int)vec.size();
   return err;
 }
 
@@ -141,7 +141,7 @@ void outPutCiphertext(vector<Ciphertext>& text, string filePre) {
   cout << "the coeff_mod_count is: " << text[0].coeff_mod_count() <<
     "\n the poly_modulus_degree is: " << text[0].poly_modulus_degree()<<endl;
 
-  for (int i = 0; i < text.size(); i++) {
+  for (size_t i = 0; i < text.size(); i++) {
     string temName = filePre + to_string(i) + ".txt";
     fstream out(temName, ios::out|ios::binary);
     text[i].save(out);
@@ -151,7 +151,7 @@ void outPutCiphertext(vector<Ciphertext>& text, string filePre) {
 
 void outPutCiphertext(vector<Plaintext>& text, string filePre) {
   cout << filePre << endl;
-  for (int i = 0; i < text.size(); i++) {
+  for (size_t i = 0; i < text.size(); i++) {
     cout << "the coeff_count is: " << text[0].coeff_count() <<
       "\n the poly_modulus_degree is: " << text[0].nonzero_coeff_count() << endl;
     string temName = filePre + to_string(i) + ".txt";

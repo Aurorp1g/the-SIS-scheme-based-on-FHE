@@ -103,7 +103,6 @@ void fitSize(vector<Ciphertext>& vec, shared_ptr<seal::SEALContext>& context, ve
     return;
   // change the scale and chain-index of  every element
   int minn = 10, tem;
-  parms_id_type minn_p;
   for (int i = 0; i < vec.size(); i++) {
     tem = context->get_context_data(vec[i].parms_id())->chain_index();
     minn = minn < tem ? minn : tem;
@@ -237,7 +236,6 @@ void fitSize4(vector<Ciphertext>& vec, shared_ptr<seal::SEALContext>& context, v
     return;
   // change the scale and chain-index of  every element
   int minn = 10, tem;
-  parms_id_type minn_p;
   for (int i = 0; i < vec.size(); i++) {
     tem = context->get_context_data(vec[i].parms_id())->chain_index();
     minn = minn < tem ? minn : tem;
@@ -277,5 +275,3 @@ Ciphertext  cal_mut1(vector<Ciphertext> vec, Evaluator& evaluator, RelinKeys& re
   }
   return vec[0];
 }
-
-

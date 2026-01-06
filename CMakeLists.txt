@@ -77,7 +77,7 @@ target_include_directories(sis-scheme-main PRIVATE
 # 编译器选项配置
 target_compile_options(sis-scheme-main PRIVATE 
     $<$<CXX_COMPILER_ID:MSVC>:/wd4100 /wd4996>
-    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-unused-parameter -Wno-deprecated-copy>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-unused-parameter -Wno-deprecated-copy -Wno-pedantic>
 )
 
 # 链接SEAL库

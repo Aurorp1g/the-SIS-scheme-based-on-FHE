@@ -245,7 +245,7 @@ vector<int> recoveryDemo(vector<int>& Xtem, vector<int>& ytem, DecTools& tools, 
   }
 }
 
-Picture& recoveryByPlain(vector<SharePic>& source, Params& parms, DecTools& tools) {
+Picture recoveryByPlain(vector<SharePic>& source, Params& parms, DecTools& tools) {
   cout << "----------------";
   cout << "----------------";
   cout << "start recover the secret image using plaintext without FHE:";
@@ -287,4 +287,3 @@ Picture recoveryByPlainCKKS(vector<SharePic>& source, Params& parms, DecTools& t
   }
   return pic;
 }
-

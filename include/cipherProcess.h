@@ -1,11 +1,25 @@
+/**
+ * @file cipherProcess.h
+ * @brief FHE-based secret sharing functions for BFV and CKKS schemes
+ * @details Provides encrypted secret sharing and recovery functions using Microsoft SEAL library.
+ *          Supports BFV (single integer and batch), CKKS, and hybrid encryption schemes.
+ * @version 1.0
+ * @date 2026
+ */
+
 #pragma once
 #include "baseClass.h"
 #include "SealSchme.h"
 #include <seal/seal.h>
 
-/*==============================================================
- *  工具：BFV 单整数加密（4.1.2）
- *=============================================================*/
+/**
+ * @brief Encode and encrypt a single integer value (BFV)
+ * @details Creates a plaintext from a single int64 value and encrypts it using BFV scheme
+ * @param val Integer value to encrypt
+ * @param enc Batch encoder
+ * @param encryptor Encryptor instance
+ * @return Encrypted ciphertext
+ */
 inline seal::Ciphertext encode_encrypt_int(std::int64_t val,
                                            const seal::BatchEncoder& enc,
                                            seal::Encryptor& encryptor)
@@ -17,9 +31,18 @@ inline seal::Ciphertext encode_encrypt_int(std::int64_t val,
     return ct;
 }
 
-/*==============================================================
- *  BFV 秘密共享加密流程（单整数版）
- *=============================================================*/
+/**
+ * @brief Generate secret shares using BFV encryption (single integer version)
+ * @details Implements (k, n) threshold secret sharing where each share is encrypted
+ *          using the BFV scheme. Uses polynomial evaluation over encrypted data.
+ * @param poly_modulus_degree Polynomial modulus degree
+ * @param plain_mod Plain modulus
+ * @param source Source picture containing secret data
+ * @param shares Vector of SharePic objects to store generated shares
+ * @param parms Scheme parameters
+ * @param finalRes Result object to store timing information
+ * @param printAns Whether to print generated shares
+ */
 inline void getShareByHE(std::size_t poly_modulus_degree,
                          std::uint16_t plain_mod,
                          Picture& source,
@@ -35,7 +58,6 @@ inline void getShareByHE(std::size_t poly_modulus_degree,
     seal_parms.set_coeff_modulus(seal::CoeffModulus::BFVDefault(poly_modulus_degree));
     seal_parms.set_plain_modulus(plain_mod);
 
-    // SEAL 4.x: 直接使用构造函数，而非 SEALContext::Create
     auto ctx = std::make_shared<seal::SEALContext>(seal_parms);
     seal::KeyGenerator keygen(*ctx);
     seal::PublicKey pk;
@@ -44,7 +66,6 @@ inline void getShareByHE(std::size_t poly_modulus_degree,
     seal::RelinKeys rlk;
     keygen.create_relin_keys(rlk);
 
-    // SEAL 4.x: Encryptor 构造方式变化
     seal::Encryptor encryptor(*ctx, pk, sk);
     seal::Evaluator evaluator(*ctx);
     seal::Decryptor decryptor(*ctx, sk);
@@ -90,9 +111,18 @@ inline void getShareByHE(std::size_t poly_modulus_degree,
     std::cout << "decoding finished. time: " << dur << "s\n\n";
 }
 
-/*==============================================================
- *  BFV 恢复流程（单整数版）
- *=============================================================*/
+/**
+ * @brief Recover secret picture from BFV encrypted shares (single integer version)
+ * @details Reconstructs the original secret using encrypted shares via Lagrange interpolation
+ * @param picParms Scheme parameters
+ * @param uploadShares Vector of encrypted shares
+ * @param tools Decryption tools containing intermediate values
+ * @param finalRes Result object to store timing information
+ * @param degree Polynomial modulus degree (default: 8192)
+ * @param plain_mod Plain modulus (default: 1024)
+ * @param printAns Whether to print recovery results
+ * @return Recovered picture
+ */
 inline Picture recoryShare(Params& picParms,
                            std::vector<SharePic> uploadShares,
                            DecTools& tools,
@@ -161,9 +191,16 @@ inline Picture recoryShare(Params& picParms,
     return recon_pic;
 }
 
-/*==============================================================
- *  CKKS 秘密共享加密流程
- *=============================================================*/
+/**
+ * @brief Generate secret shares using CKKS encryption
+ * @details Implements (k, n) threshold secret sharing using CKKS scheme for floating-point data
+ * @param poly_modulus_degree Polynomial modulus degree
+ * @param source Source picture containing secret data
+ * @param shares Vector of SharePic objects to store generated shares
+ * @param parms Scheme parameters
+ * @param finalRes Result object to store timing information
+ * @param printAns Whether to print generated shares
+ */
 inline void getShareByCKKS(std::size_t poly_modulus_degree,
                            Picture& source,
                            std::vector<SharePic>& shares,
@@ -245,9 +282,18 @@ inline void getShareByCKKS(std::size_t poly_modulus_degree,
     std::cout << "decoding finished. time: " << dur << "s\n\n";
 }
 
-/*==============================================================
- *  CKKS 恢复流程
- *=============================================================*/
+/**
+ * @brief Recover secret picture from CKKS encrypted shares
+ * @details Reconstructs the original secret using encrypted CKKS shares via Lagrange interpolation
+ * @param picParms Scheme parameters
+ * @param uploadShares Vector of encrypted shares
+ * @param tools Decryption tools containing intermediate values
+ * @param finalRes Result object to store timing information
+ * @param oriPic Original picture for comparison
+ * @param degree Polynomial modulus degree (default: 8192)
+ * @param printAns Whether to print recovery results
+ * @return Recovered picture
+ */
 inline Picture recoryShareCKKS(Params& picParms,
                                std::vector<SharePic>& uploadShares,
                                DecTools& tools,
@@ -303,7 +349,7 @@ inline Picture recoryShareCKKS(Params& picParms,
             X.push_back(sh.x_en[group]);
             Ys.push_back(sh.fx_en[group]);
         }
-        // 修复：显式转换为 double，避免窄化转换警告
+        
         seal::Plaintext invKT_plain;
         encoder.encode(std::vector<double>{ static_cast<double>(tools.invKT[group]) },
                        picParms.getScale(), invKT_plain);
@@ -325,9 +371,16 @@ inline Picture recoryShareCKKS(Params& picParms,
     return recon_pic;
 }
 
-/*==============================================================
- *  BFV 批处理秘密共享加密流程
- *=============================================================*/
+/**
+ * @brief Generate secret shares using BFV batch encryption
+ * @details Implements (k, n) threshold secret sharing using BFV batching for parallel processing
+ * @param poly_modulus_degree Polynomial modulus degree
+ * @param source Source picture containing secret data
+ * @param shares Vector of SharePic objects to store generated shares
+ * @param parms Scheme parameters
+ * @param finalRes Result object to store timing information
+ * @param printAns Whether to print generated shares
+ */
 inline void getShareByBFV(std::size_t poly_modulus_degree,
                           Picture& source,
                           std::vector<SharePic>& shares,
@@ -414,9 +467,18 @@ inline void getShareByBFV(std::size_t poly_modulus_degree,
     std::cout << "decoding finished. time: " << dur << "s\n\n";
 }
 
-/*==============================================================
- *  BFV 批处理恢复流程
- *=============================================================*/
+/**
+ * @brief Recover secret picture from BFV batch encrypted shares
+ * @details Reconstructs the original secret using encrypted BFV batch shares via Lagrange interpolation
+ * @param picParms Scheme parameters
+ * @param uploadShares Vector of encrypted shares
+ * @param tools Decryption tools containing intermediate values
+ * @param finalRes Result object to store timing information
+ * @param oriPic Original picture for comparison
+ * @param degree Polynomial modulus degree (default: 8192)
+ * @param printAns Whether to print recovery results
+ * @return Recovered picture
+ */
 inline Picture recoryShareBFV(Params& picParms,
                               std::vector<SharePic>& uploadShares,
                               DecTools& tools,
@@ -484,7 +546,6 @@ inline Picture recoryShareBFV(Params& picParms,
         seal::Ciphertext invKT_en;
         encryptor.encrypt(invKT_plain, invKT_en);
 
-        // 修复：使用 encoder 而非未定义的 batch_enc
         std::vector<seal::Ciphertext> a =
             fullRecoveryBFV(X, Ys, invKT_en, encryptor, evaluator,
                             encoder, decryptor, rlk, norm, picParms, context);
@@ -495,7 +556,6 @@ inline Picture recoryShareBFV(Params& picParms,
     std::cout << "reconstructing finished. time: " << dur << "s\n";
     finalRes.generate1 = dur;
 
-    // 修复：使用 encoder 而非未定义的 batch_enc
     recon_pic.setPic(recon_pic.DecryPicBFV(decryptor, encoder, evaluator, norm, finalRes, printAns));
     recon_pic.compare(oriPic, norm);
     return recon_pic;

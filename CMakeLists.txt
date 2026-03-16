@@ -72,6 +72,11 @@ add_executable(sis-scheme-main)
 # 主源文件配置
 target_sources(sis-scheme-main PRIVATE
     src/CKKS.cpp
+    src/baseClass.cpp
+    src/PlainProcess.cpp
+    src/tools.cpp
+    src/mymath.cpp
+    src/math_test.cpp
 )
 
 # 包含目录配置
@@ -92,9 +97,6 @@ target_link_libraries(sis-scheme-main
         ${SEAL_LIBRARIES}
         z           # zlib
         zstd        # zstd 压缩库
-        bcrypt      # Windows 加密 API（如果已有则保留）
-        crypt32     # Windows 加密 API（如果已有则保留）
-        ws2_32      # Windows Socket API（如果已有则保留）
 )
 
 # Windows平台特定链接库

@@ -1,3 +1,12 @@
+/**
+ * @file SealSchme.h
+ * @brief SEAL library wrapper and scheme-specific helper functions
+ * @details Provides utility functions for SEAL library initialization, parameter printing,
+ *          encryption/decryption, and Lagrange interpolation operations for BFV and CKKS schemes.
+ * @version 1.0
+ * @date 2026
+ */
+
 #pragma once
 #include <iostream>
 #include <vector>
@@ -5,9 +14,12 @@
 #include "mymath.h"
 #include "tools.h"
 
-/*==============================================================
- *  工具：打印上下文参数（4.1.2 版）
- *=============================================================*/
+/**
+ * @brief Print SEAL encryption parameters
+ * @details Outputs the encryption scheme, polynomial modulus degree, coefficient modulus size,
+ *          and plain modulus (for BFV) to standard output
+ * @param context SEAL context containing the encryption parameters
+ */
 inline void print_parameters(std::shared_ptr<seal::SEALContext> context)
 {
     if (!context) throw std::invalid_argument("context is not set");
@@ -38,17 +50,24 @@ inline void print_parameters(std::shared_ptr<seal::SEALContext> context)
     std::cout << "\\\n";
 }
 
-/*==============================================================
- *  工具：噪声预算
- *=============================================================*/
+/**
+ * @brief Print noise budget of ciphertext
+ * @details Outputs the remaining noise budget in bits for a given ciphertext
+ * @param decryptor Decryptor instance
+ * @param ct Ciphertext to check
+ */
 inline void getNoise(seal::Decryptor& decryptor, const seal::Ciphertext& ct)
 {
     std::cout << "Noise budget: " << decryptor.invariant_noise_budget(ct) << " bits\n";
 }
 
-/*==============================================================
- *  工具：BFV 单整数加密（4.1.2 版）
- *=============================================================*/
+/**
+ * @brief Encode and encrypt a single integer value (BFV)
+ * @param value Integer value to encrypt
+ * @param encoder Batch encoder
+ * @param encryptor Encryptor instance
+ * @return Encrypted ciphertext
+ */
 inline seal::Ciphertext getEnText(std::int64_t value,
                                   seal::BatchEncoder& encoder,
                                   seal::Encryptor& encryptor)
@@ -60,6 +79,13 @@ inline seal::Ciphertext getEnText(std::int64_t value,
     return ct;
 }
 
+/**
+ * @brief Encode and encrypt multiple integer values (BFV)
+ * @param values Vector of integer values to encrypt
+ * @param encoder Batch encoder
+ * @param encryptor Encryptor instance
+ * @return Vector of encrypted ciphertexts
+ */
 inline std::vector<seal::Ciphertext>
 getEnText(const std::vector<std::int64_t>& values,
           seal::BatchEncoder& encoder,
@@ -71,9 +97,14 @@ getEnText(const std::vector<std::int64_t>& values,
     return ans;
 }
 
-/*==============================================================
- *  工具：CKKS 单 double 加密
- *=============================================================*/
+/**
+ * @brief Encode and encrypt a single double value (CKKS)
+ * @param value Double value to encrypt
+ * @param scale Encoding scale
+ * @param encoder CKKS encoder
+ * @param encryptor Encryptor instance
+ * @return Encrypted ciphertext
+ */
 inline seal::Ciphertext
 getEnText(double value, double scale,
           seal::CKKSEncoder& encoder,
@@ -86,9 +117,13 @@ getEnText(double value, double scale,
     return ct;
 }
 
-/*==============================================================
- *  工具：BFV 解密单个 int64
- *=============================================================*/
+/**
+ * @brief Decrypt and decode a single int64 value (BFV)
+ * @param decryptor Decryptor instance
+ * @param encoder Batch encoder
+ * @param ct Ciphertext to decrypt
+ * @return Decrypted integer value
+ */
 inline std::int64_t
 getDeText(seal::Decryptor& decryptor,
           seal::BatchEncoder& encoder,
@@ -101,9 +136,13 @@ getDeText(seal::Decryptor& decryptor,
     return vec.empty() ? 0 : vec[0];
 }
 
-/*==============================================================
- *  工具：CKKS 解密单个 double
- *=============================================================*/
+/**
+ * @brief Decrypt and decode a single double value (CKKS)
+ * @param decryptor Decryptor instance
+ * @param encoder CKKS encoder
+ * @param ct Ciphertext to decrypt
+ * @return Decrypted double value
+ */
 inline double
 getDeText(seal::Decryptor& decryptor,
           seal::CKKSEncoder& encoder,
@@ -116,9 +155,12 @@ getDeText(seal::Decryptor& decryptor,
     return vec.empty() ? 0.0 : vec[0];
 }
 
-/*==============================================================
- *  工具：快速检查噪声
- *=============================================================*/
+/**
+ * @brief Check if ciphertext has valid noise budget
+ * @details Exits the program if noise budget is exhausted
+ * @param decryptor Decryptor instance
+ * @param ct Ciphertext to check
+ */
 inline void check(seal::Decryptor& decryptor, const seal::Ciphertext& ct)
 {
     if (decryptor.invariant_noise_budget(ct) == 0) {
@@ -127,9 +169,12 @@ inline void check(seal::Decryptor& decryptor, const seal::Ciphertext& ct)
     }
 }
 
-/*==============================================================
- *  工具：打印 BFV 明文（调试用）
- *=============================================================*/
+/**
+ * @brief Print decrypted BFV plaintext (debug utility)
+ * @param decryptor Decryptor instance
+ * @param encoder Batch encoder
+ * @param ct Ciphertext to decrypt and print
+ */
 inline void printDe(seal::Decryptor& decryptor,
                     seal::BatchEncoder& encoder,
                     const seal::Ciphertext& ct)
@@ -142,9 +187,13 @@ inline void printDe(seal::Decryptor& decryptor,
     std::cout << "\n";
 }
 
-/*==============================================================
- *  工具：打印 CKKS 明文（调试用）
- *=============================================================*/
+/**
+ * @brief Print decrypted CKKS plaintext (debug utility)
+ * @param decryptor Decryptor instance
+ * @param encoder CKKS encoder
+ * @param ct Ciphertext to decrypt and print
+ * @param print_cnt Number of elements to print
+ */
 inline void printDe(seal::Decryptor& decryptor,
                     seal::CKKSEncoder& encoder,
                     const seal::Ciphertext& ct,
@@ -159,16 +208,25 @@ inline void printDe(seal::Decryptor& decryptor,
     std::cout << "\n";
 }
 
-/*==============================================================
- *  计算拉格朗日系数 m_i = 1 / \prod_{j≠i}(x_i - x_j)   (BFV)
- *=============================================================*/
+/**
+ * @brief Compute Lagrange coefficients m_i = 1 / product(x_i - x_j) for j != i (BFV)
+ * @details Calculates the Lagrange basis coefficients for secret reconstruction
+ * @param evaluator Evaluator instance
+ * @param relin_keys Relinization keys
+ * @param X Vector of ciphertext x values
+ * @param ONE Encrypted one
+ * @param decryptor Decryptor instance
+ * @param KT Accumulator for product computation (in-place update)
+ * @param encoder Batch encoder
+ * @return Vector of encrypted Lagrange coefficients
+ */
 inline std::vector<seal::Ciphertext>
 getM(seal::Evaluator& evaluator,
      seal::RelinKeys& relin_keys,
      const std::vector<seal::Ciphertext>& X,
      const seal::Ciphertext& ONE,
      seal::Decryptor& decryptor,
-     seal::Ciphertext& KT,        // 乘积累加器（可就地更新）
+     seal::Ciphertext& KT,
      seal::BatchEncoder& encoder)
 {
     std::vector<seal::Ciphertext> M;
@@ -190,9 +248,18 @@ getM(seal::Evaluator& evaluator,
     return M;
 }
 
-/*==============================================================
- *  计算拉格朗日系数 m_i  (CKKS)
- *=============================================================*/
+/**
+ * @brief Compute Lagrange coefficients m_i (CKKS version)
+ * @details Similar to getM but optimized for CKKS scheme with rescaling
+ * @param evaluator Evaluator instance
+ * @param relinkeys Relinization keys
+ * @param X Vector of ciphertext x values
+ * @param ONES Vector of encrypted ones at different levels
+ * @param decryptor Decryptor instance
+ * @param encoder CKKS encoder
+ * @param context SEAL context
+ * @return Vector of encrypted Lagrange coefficients
+ */
 vector<Ciphertext> getMCKKS(Evaluator& evaluator, RelinKeys& relinkeys, vector<Ciphertext> X,
   vector<Ciphertext> ONES, Decryptor& decryptor, CKKSEncoder& encoder, shared_ptr<seal::SEALContext>& context) {
   vector<Ciphertext> M;
@@ -211,9 +278,17 @@ vector<Ciphertext> getMCKKS(Evaluator& evaluator, RelinKeys& relinkeys, vector<C
   return M;
 }
 
-/*==============================================================
- *  计算拉格朗日系数 m_i  (BFV-batch)
- *=============================================================*/
+/**
+ * @brief Compute Lagrange coefficients m_i (BFV batch version)
+ * @details Uses BFV batching for parallel computation of Lagrange coefficients
+ * @param evaluator Evaluator instance
+ * @param relin_keys Relinization keys
+ * @param X Vector of ciphertext x values
+ * @param ONE Encrypted one
+ * @param decryptor Decryptor instance
+ * @param encoder Batch encoder
+ * @return Vector of encrypted Lagrange coefficients
+ */
 inline std::vector<seal::Ciphertext>
 getMBFV(seal::Evaluator& evaluator,
         seal::RelinKeys& relin_keys,
@@ -243,9 +318,17 @@ getMBFV(seal::Evaluator& evaluator,
     return M;
 }
 
-/*==============================================================
- *  计算 K_i = \prod_{j≠i} m_j   (BFV)
- *=============================================================*/
+/**
+ * @brief Compute K_i = product of m_j for j != i (BFV)
+ * @details Computes the aggregated coefficients for secret reconstruction
+ * @param evaluator Evaluator instance
+ * @param relin_keys Relinization keys
+ * @param m Vector of Lagrange coefficients
+ * @param ONE Encrypted one
+ * @param decryptor Decryptor instance
+ * @param P_se Encrypted polynomial evaluation
+ * @return Vector of encrypted K coefficients
+ */
 inline std::vector<seal::Ciphertext>
 getK(seal::Evaluator& evaluator,
      seal::RelinKeys& relin_keys,
@@ -268,12 +351,21 @@ getK(seal::Evaluator& evaluator,
     return K;
 }
 
-/*==============================================================
- *  计算 A_i = K_i * Y_i  (CKKS)
- *=============================================================*/
+/**
+ * @brief Compute A_i = K_i * Y_i (CKKS)
+ * @details Multiplies each K coefficient with corresponding Y value
+ * @param evaluator Evaluator instance
+ * @param relinkeys Relinization keys
+ * @param Y Vector of encrypted Y values
+ * @param m Vector of Lagrange coefficients
+ * @param ONES Vector of encrypted ones at different levels
+ * @param decryptor Decryptor instance
+ * @param context SEAL context
+ * @return Vector of encrypted A coefficients
+ */
 vector<Ciphertext> getACKKS(Evaluator& evaluator,
   RelinKeys& relinkeys,vector<Ciphertext>& Y,vector<Ciphertext>& m,
-  vector<Ciphertext>& ONES, Decryptor& decryptor, shared_ptr<seal::SEALContext>& context) {//the decryptor is not necessary;
+  vector<Ciphertext>& ONES, Decryptor& decryptor, shared_ptr<seal::SEALContext>& context) {
   vector<Ciphertext> A;
   vector<Ciphertext> temVec;
   Ciphertext tem;
@@ -290,9 +382,17 @@ vector<Ciphertext> getACKKS(Evaluator& evaluator,
   return A;
 }
 
-/*==============================================================
- *  计算 A_i = K_i * Y_i  (BFV-batch)
- *=============================================================*/
+/**
+ * @brief Compute A_i = K_i * Y_i (BFV batch)
+ * @details Multiplies each K coefficient with corresponding Y value using BFV batching
+ * @param evaluator Evaluator instance
+ * @param relin_keys Relinization keys
+ * @param Y Vector of encrypted Y values
+ * @param m Vector of Lagrange coefficients
+ * @param ONE Encrypted one
+ * @param decryptor Decryptor instance
+ * @return Vector of encrypted A coefficients
+ */
 inline std::vector<seal::Ciphertext>
 getABFV(seal::Evaluator& evaluator,
         seal::RelinKeys& relin_keys,
@@ -318,9 +418,20 @@ getABFV(seal::Evaluator& evaluator,
     return A;
 }
 
-/*==============================================================
- *  遗留接口：recovery (BFV 单整数版) —— 仅做演示，已替换为 BatchEncoder
- *=============================================================*/
+/**
+ * @brief Legacy recovery function (BFV single integer) - demonstration only
+ * @details This function is kept for demonstration purposes, replaced by BatchEncoder version
+ * @param X Vector of x values
+ * @param Y Vector of y values (f(x))
+ * @param m Vector of Lagrange coefficients
+ * @param m Vector of K coefficients
+ * @param KT Product of all denominators
+ * @param invKT Inverse of KT
+ * @param poly_modulus_degree Polynomial modulus degree
+ * @param plain_mod Plain modulus
+ * @param k Threshold parameter
+ * @return Recovered polynomial coefficients
+ */
 inline std::vector<int>
 recovery(std::vector<long long>& X,
          std::vector<long long>& Y,
@@ -341,20 +452,19 @@ recovery(std::vector<long long>& X,
     parms.set_coeff_modulus(seal::CoeffModulus::BFVDefault(poly_modulus_degree));
     parms.set_plain_modulus(plain_mod);
 
-    seal::SEALContext context(parms);                 // 4.1.2 直接构造
+    seal::SEALContext context(parms);
     seal::KeyGenerator keygen(context);
     seal::PublicKey pk;
-    keygen.create_public_key(pk);                     // 4.1.2 两步走
+    keygen.create_public_key(pk);
     seal::SecretKey sk = keygen.secret_key();
     seal::RelinKeys rlk;
-    keygen.create_relin_keys(rlk);                    // 4.1.2 两步走
+    keygen.create_relin_keys(rlk);
 
-    seal::Encryptor encryptor(context, pk, sk);       // 4.1.2 三参数构造
+    seal::Encryptor encryptor(context, pk, sk);
     seal::Evaluator evaluator(context);
     seal::Decryptor decryptor(context, sk);
-    seal::BatchEncoder batch_enc(context);            // 4.1.2 统一用 BatchEncoder
+    seal::BatchEncoder batch_enc(context);
 
-    /* 2. 加密输入 */
     auto encode_encrypt = [&](long long v) {
         seal::Plaintext pt;
         batch_enc.encode(std::vector<std::int64_t>{v}, pt);
@@ -373,7 +483,6 @@ recovery(std::vector<long long>& X,
 
     std::cout << "upload X,Y,K,m,KT,invKT to the remote server:\n";
 
-    /* 3. A = K_i * Y_i */
     std::vector<seal::Ciphertext> A;
     for (size_t i = 0; i < K_en.size(); ++i) {
         seal::Ciphertext t;
@@ -382,13 +491,10 @@ recovery(std::vector<long long>& X,
         A.push_back(t);
     }
 
-    /* 4. 计算 D = getD(X, k) 并加密 */
     auto zero_ct = encode_encrypt(0LL);
     auto one_ct  = encode_encrypt(1LL);
-    // 4.1.2 版 getD 签名已统一，直接调用
     auto D = getD(X_en, evaluator, decryptor, rlk, k, zero_ct, one_ct);
 
-    /* 5. 恢复多项式系数 a_i = (∑ A_j * D_{j,k-1-i}) * invKT */
     std::vector<seal::Ciphertext> a;
     for (int i = 0; i < k; ++i) {
         seal::Ciphertext tem = zero_ct;
@@ -403,7 +509,6 @@ recovery(std::vector<long long>& X,
         a.push_back(tem);
     }
 
-    /* 6. 本地解密并取模 */
     std::cout << "download from the center server;\nstart to decoder locally\n";
     std::vector<int> ans_fl;
     long long mod = 251;
@@ -423,10 +528,21 @@ recovery(std::vector<long long>& X,
     return ans_fl;
 }
 
-/*==============================================================
- *  fullRecovery 系列（BFV / CKKS / BFV-batch）
- *  以下接口已统一为 4.1.2 语法，可直接调用
- *=============================================================*/
+/**
+ * @brief Full secret recovery (BFV version)
+ * @details Reconstructs secret from encrypted shares using Lagrange interpolation
+ * @param X_enc Vector of encrypted x values
+ * @param Y_enc Vector of encrypted y values
+ * @param invKT_en Encrypted inverse of denominator product
+ * @param encryptor Encryptor instance
+ * @param evaluator Evaluator instance
+ * @param encoder Batch encoder
+ * @param decryptor Decryptor instance
+ * @param relin_keys Relinization keys
+ * @param norm Normalization parameters
+ * @param k Threshold parameter
+ * @return Vector of encrypted polynomial coefficients
+ */
 inline std::vector<seal::Ciphertext>
 fullRecovery(std::vector<seal::Ciphertext>& X_en,
              std::vector<seal::Ciphertext>& Y_en,
@@ -465,6 +581,22 @@ fullRecovery(std::vector<seal::Ciphertext>& X_en,
     return a;
 }
 
+/**
+ * @brief Full secret recovery (CKKS version)
+ * @details Reconstructs secret from encrypted CKKS shares using Lagrange interpolation with rescaling
+ * @param X_enc Vector of encrypted x values
+ * @param Y_enc Vector of encrypted y values
+ * @param invKT_en Encrypted inverse of denominator product
+ * @param encryptor Encryptor instance
+ * @param evaluator Evaluator instance
+ * @param encoder CKKS encoder
+ * @param decryptor Decryptor instance
+ * @param relin_keys Relinization keys
+ * @param norm Normalization parameters
+ * @param parms Scheme parameters
+ * @param context SEAL context
+ * @return Vector of encrypted polynomial coefficients
+ */
 inline std::vector<seal::Ciphertext>
 fullRecoveryCKKS(std::vector<seal::Ciphertext>& X_en,
                  std::vector<seal::Ciphertext>& Y_en,
@@ -500,6 +632,22 @@ fullRecoveryCKKS(std::vector<seal::Ciphertext>& X_en,
     return a;
 }
 
+/**
+ * @brief Full secret recovery (BFV batch version)
+ * @details Reconstructs secret from encrypted BFV batch shares using Lagrange interpolation
+ * @param X_enc Vector of encrypted x values
+ * @param Y_enc Vector of encrypted y values
+ * @param invKT_en Encrypted inverse of denominator product
+ * @param encryptor Encryptor instance
+ * @param evaluator Evaluator instance
+ * @param encoder Batch encoder
+ * @param decryptor Decryptor instance
+ * @param relin_keys Relinization keys
+ * @param norm Normalization parameters
+ * @param parms Scheme parameters
+ * @param context SEAL context
+ * @return Vector of encrypted polynomial coefficients
+ */
 inline std::vector<seal::Ciphertext>
 fullRecoveryBFV(std::vector<seal::Ciphertext>& X_en,
                 std::vector<seal::Ciphertext>& Y_en,
@@ -537,9 +685,22 @@ fullRecoveryBFV(std::vector<seal::Ciphertext>& X_en,
     return a;
 }
 
-/*==============================================================
- *  CKKS 优化版：X 为明文 double，省去一次加密
- *=============================================================*/
+/**
+ * @brief Full secret recovery (CKKS optimized version)
+ * @details CKKS version where X values are plaintext doubles, eliminating one encryption
+ * @param X Plaintext x values (vector of doubles)
+ * @param Y_enc Vector of encrypted y values
+ * @param invKT_en Encrypted inverse of denominator product
+ * @param encryptor Encryptor instance
+ * @param evaluator Evaluator instance
+ * @param encoder CKKS encoder
+ * @param decryptor Decryptor instance
+ * @param relin_keys Relinization keys
+ * @param norm Normalization parameters
+ * @param parms Scheme parameters
+ * @param context SEAL context
+ * @return Vector of encrypted polynomial coefficients
+ */
 inline std::vector<seal::Ciphertext>
 fullRecoveryCKKS2(std::vector<double>& X,
                   std::vector<seal::Ciphertext>& Y_en,
@@ -558,7 +719,6 @@ fullRecoveryCKKS2(std::vector<double>& X,
     auto ones     = norm.ONES;
     double scale  = parms.getScale();
 
-    /* 明文计算 m 和 D */
     std::vector<double> m(k, 1.0), D = getD(X, k);
     for (int i = 0; i < k; ++i)
         for (int j = 0; j < k; ++j)

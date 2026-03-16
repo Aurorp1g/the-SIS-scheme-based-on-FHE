@@ -1,3 +1,12 @@
+/**
+ * @file tools.h
+ * @brief Utility functions for error calculation and ciphertext I/O
+ * @details Provides helper functions for error analysis, vector printing,
+ *          and ciphertext/ptext serialization
+ * @version 1.0
+ * @date 2026
+ */
+
 #pragma once
 #include<iostream>
 #include<vector>
@@ -8,165 +17,92 @@
 using namespace std;
 using namespace seal;
 
+/**
+ * @struct Error
+ * @brief Error statistics structure
+ * @details Stores statistical metrics for error analysis
+ */
 struct Error {
-  double total;
-  double mean;
-  double var;
-  double maxn;
-  int dataScale;
+    double total;      ///< Sum of all error values
+    double mean;       ///< Mean error
+    double var;        ///< Variance of errors
+    double maxn;       ///< Maximum error
+    int dataScale;     ///< Number of data points
 };
 
+/**
+ * @brief Print vector of doubles
+ * @param vec Vector to print
+ * @param num Number of elements to show from start and end
+ * @param pres Precision for floating point output
+ */
+void print_vec(vector<double>&vec,int num,int pres=4);
 
-/// <summary>
-/// print vector
-/// </summary>
-/// <param name="vec"></param>
-/// <param name="num"></param>
-void print_vec(vector<double>&vec,int num,int pres=4) {
-  ios old_fmt(nullptr);
-  old_fmt.copyfmt(cout);
-  cout << fixed << setprecision(pres);
+/**
+ * @brief Print vector of integers
+ * @param vec Vector to print
+ * @param num Number of elements to show from start and end
+ * @param pres Precision for floating point output
+ */
+void print_vec(vector<int>& vec, int num, int pres = 4);
 
-  size_t len = num * 2;
-  if (vec.size() <= len) {
-    vec.resize(len + 1);
-  }
-  cout << "[";
-  for (size_t i = 0; i < (size_t)num; i++) {
-    cout << vec[i] << ", ";
-  }
-  cout << "..., ";
-  for (size_t i = vec.size() - num; i < vec.size(); i++) {
-    cout << vec[i] << ", ";
-  }
-  cout << "]" << endl;
-  cout.copyfmt(old_fmt);
-}
+/**
+ * @brief Print blank lines
+ * @param tag Number of blank lines to print
+ */
+void print_line(int tag = 1);
 
-void print_vec(vector<int>& vec, int num, int pres = 4) {
-  ios old_fmt(nullptr);
-  old_fmt.copyfmt(cout);
-  cout << fixed << setprecision(pres);
+/**
+ * @brief Print decrypted CKKS ciphertext vector
+ * @param decryptor Decryptor instance
+ * @param encoder CKKS encoder
+ * @param en Ciphertext to decrypt and print
+ */
+void PrintDeVec(Decryptor& decryptor, CKKSEncoder& encoder, Ciphertext& en);
 
-  size_t len = num * 2;
-  if (vec.size() <= len) {
-    vec.resize(len + 1);
-  }
-  cout << "[";
-  for (size_t i = 0; i < (size_t)num; i++) {
-    cout << vec[i] << ", ";
-  }
-  cout << "..., ";
-  for (size_t i = vec.size() - num; i < vec.size(); i++) {
-    cout << vec[i] << ", ";
-  }
-  cout << "]" << endl;
-  cout.copyfmt(old_fmt);
-}
+/**
+ * @brief Print multiple decrypted CKKS ciphertext vectors
+ * @param decryptor Decryptor instance
+ * @param encoder CKKS encoder
+ * @param en Vector of ciphertexts
+ * @param tag Whether to print multiple elements per ciphertext
+ * @param num Number of elements to print
+ */
+void PrintDeVec(Decryptor& decryptor, CKKSEncoder& encoder, vector<Ciphertext>& en, int tag = 1, int num = 4);
 
-void print_line(int tag = 1) {
-  for (int i = 0; i < tag; i++) {
-    cout << endl;
-  }
-}
+/**
+ * @brief Calculate error statistics for double vector
+ * @param vec Input vector
+ * @return Error structure with statistics
+ */
+Error cal_err(vector<double>& vec);
 
-void PrintDeVec(Decryptor& decryptor, CKKSEncoder& encoder, Ciphertext& en) {
-  Plaintext plain;
-  decryptor.decrypt(en, plain);
-  vector<double> temAns;
-  encoder.decode(plain,temAns);
-  print_vec(temAns, 5, 4);
-  print_line();
-}
+/**
+ * @brief Calculate error statistics for integer vector
+ * @param vec Input vector
+ * @return Error structure with statistics
+ */
+Error cal_err(vector<int> vec);
 
-void PrintDeVec(Decryptor& decryptor, CKKSEncoder& encoder, vector<Ciphertext>& en, int tag = 1,int num=4) {
-  Plaintext plain;
-  vector<double> temAns;
-  for (size_t i = 0; i < en.size(); i++) {
-    decryptor.decrypt(en[i], plain);
-    encoder.decode(plain, temAns);
-    if (tag) {
-      print_vec(temAns, num);
-    }
-    else {
-      print_vec(temAns, 1);
-    }
-  }
-  print_line();
-}
+/**
+ * @brief Print error statistics
+ * @param err Error structure to print
+ */
+void printError(Error& err);
 
-Error cal_err(vector<double>& vec) {
-  Error err;
-  err.maxn = err.var = err.total = 0;
-  for (size_t i = 0; i < vec.size(); i++) {
-    err.total += vec[i];
-    err.maxn = max(fabs((double)vec[i]), err.maxn);
-  }
-  err.mean = err.total / vec.size();
-  for (size_t i = 0; i < vec.size(); i++) {
-    err.var += pow(vec[i]-err.mean, 2);
-  }
-  err.var /= vec.size();
-  err.dataScale = (int)vec.size();
-  return err;
-}
-
-Error cal_err(vector<int> vec) {
-  Error err;
-  err.maxn = err.var = err.total = 0;
-  for (size_t i = 0; i < vec.size(); i++) {
-    err.total += vec[i];
-    err.maxn = max((double)vec[i], err.maxn);
-  }
-  err.mean = err.total / vec.size();
-  for (size_t i = 0; i < vec.size(); i++) {
-    err.var += pow(vec[i] - err.mean, 2);
-  }
-  err.var /= vec.size();
-  err.dataScale = (int)vec.size();
-  return err;
-}
-
-void printError(Error& err) {
-  cout << endl;
-  ios old_fmt(nullptr);
-  old_fmt.copyfmt(cout);
-  cout << fixed << setprecision(3);
-  cout << "the error detials[siz,totalsum, max, mean, var]: [" << err.dataScale << ", " << err.total << ", " << err.maxn << ", " << err.mean << ", " << err.var << "]" << endl;
-  cout.copyfmt(old_fmt);
-}
-
+/**
+ * @brief Output ciphertexts to files
+ * @param text Vector of ciphertexts
+ * @param filePre Filename prefix
+ * @param context SEAL context
+ */
 inline void outPutCiphertext(const std::vector<seal::Ciphertext>& text,
                              const std::string& filePre,
-                             std::shared_ptr<seal::SEALContext> context)
-{
-    if (text.empty()) return;
+                             std::shared_ptr<seal::SEALContext> context);
 
-    /* 从上下文拿参数，而不再调 ct 的成员函数 */
-    auto parms_id   = text[0].parms_id();
-    auto ctx_data   = context->get_context_data(parms_id);
-    auto coeff_cnt  = ctx_data->parms().coeff_modulus().size();
-    auto poly_degree= ctx_data->parms().poly_modulus_degree();
-
-    std::cout << "coeff_mod_count = " << coeff_cnt
-              << "\npoly_modulus_degree = " << poly_degree << "\n";
-
-    for (size_t i = 0; i < text.size(); ++i) {
-        std::string fname = filePre + std::to_string(i) + ".txt";
-        std::ofstream out(fname, std::ios::out | std::ios::binary);
-        text[i].save(out);
-        out.close();
-    }
-}
-
-void outPutCiphertext(vector<Plaintext>& text, string filePre) {
-  cout << filePre << endl;
-  for (size_t i = 0; i < text.size(); i++) {
-    cout << "the coeff_count is: " << text[0].coeff_count() <<
-      "\n the poly_modulus_degree is: " << text[0].nonzero_coeff_count() << endl;
-    string temName = filePre + to_string(i) + ".txt";
-    fstream out(temName, ios::out | ios::binary);
-    text[i].save(out);
-    out.close();
-  }
-}
+/**
+ * @brief Output plaintexts to files
+ * @param text Vector of plaintexts
+ * @param filePre Filename prefix
+ */
+void outPutCiphertext(vector<Plaintext>& text, string filePre);

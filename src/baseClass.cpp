@@ -1,0 +1,350 @@
+#include "../include/baseClass.h"
+
+Result::Result() = default;
+
+void Result::writeResult(string filename) {
+    fstream file(filename, ios::out | ios::app);
+    file << l << "," << w << "," << t << "," << n << "," << p << "," << x_range << ",";
+    file << poly_d0 << "," << plain_m0 << ",";
+    file << poly_d1 << "," << plain_m1 << ",";
+    file << encode0 << "," << generate0 << "," << decode0 << ",";
+    file << encode1 << "," << generate1 << "," << decode1 << "," << correct << endl;
+    file.close();
+}
+
+Params::Params() = default;
+
+Params::Params(int l, int w, int p, int n, int k, int x) {
+    L = l; W = w; ModP = p;
+    this->n = n; this->k = k; rangeX = x;
+    baseLenOfModulus = 40;
+    batches = ((L * W % k == 0) ? L * W / k : (L * W - L * W % k + k) / k);
+}
+
+int* Params::getSize() {
+    static int siz[2] = { L, W };
+    return siz;
+}
+
+int Params::getP() const { return ModP; }
+
+void Params::setP(int P) { ModP = P; }
+
+int Params::getN() const { return n; }
+
+void Params::setN(int n) { this->n = n; }
+
+int Params::getk() const { return k; }
+
+void Params::setK(int K) { k = K; }
+
+int Params::getXrange() const { return rangeX; }
+
+void Params::setXrange(int range) { rangeX = range; }
+
+void Params::setMaxLevel(int x) { maxLevel = x; }
+
+int Params::getMaxLevel() const { return maxLevel; }
+
+void Params::setScale(double scale) { this->scale = scale; }
+
+double Params::getScale() const { return scale; }
+
+int Params::getBaseLenOfModulus() const { return baseLenOfModulus; }
+
+void Params::setBaseLenOfModulus(int len) { baseLenOfModulus = len; }
+
+int Params::getBatches() const { return batches; }
+
+void Params::setBatch(int batches) { this->batches = batches; }
+
+Norm::Norm() = default;
+
+Norm::Norm(BatchEncoder& encoder, Encryptor& encryptor, Params& parms) {
+    modP = parms.getP();
+    size_t slot_count = encoder.slot_count();
+    vector<int64_t> ONE(slot_count, 1), ZERO(slot_count, 0), P(slot_count, modP);
+    Plaintext one, zero, p_plain;
+    encoder.encode(ONE, one);
+    encoder.encode(ZERO, zero);
+    encoder.encode(P, p_plain);
+    encryptor.encrypt(one, one_en);
+    encryptor.encrypt(zero, zeros_en);
+    encryptor.encrypt(p_plain, P_sen);
+}
+
+Norm::Norm(CKKSEncoder& encoder, Encryptor& encryptor, Evaluator& evaluator,
+           RelinKeys& relin_keys, Params& parms) {
+    modP = parms.getP();
+    Ciphertext tem;
+    for (int i = 0; i <= parms.getMaxLevel(); ++i) ONES.emplace_back();
+    Plaintext one, zero, p_plain;
+    encoder.encode(1.0, parms.getScale(), one);
+    encoder.encode(0.0, parms.getScale(), zero);
+    encoder.encode(static_cast<double>(modP), parms.getScale(), p_plain);
+    encryptor.encrypt(one, tem);
+    encryptor.encrypt(zero, ZERO);
+    encryptor.encrypt(p_plain, P_sen);
+    for (int i = parms.getMaxLevel(); i >= 0; --i) {
+        ONES[i] = tem;
+        if (i != 0) {
+            evaluator.multiply_inplace(tem, tem);
+            evaluator.relinearize_inplace(tem, relin_keys);
+            evaluator.rescale_to_next_inplace(tem);
+        }
+    }
+}
+
+Norm::Norm(BatchEncoder& encoder, Encryptor& encryptor, Evaluator& evaluator,
+           RelinKeys& relin_keys, Params& parms) : 
+           Norm(encoder, encryptor, parms) {}
+
+Picture::Picture() = default;
+
+Picture::Picture(Params& parms) {
+    siz[0] = parms.L; siz[1] = parms.W;
+    origin_pic.resize(siz[0] * siz[1], 0);
+    origin_sec.resize(siz[0] * siz[1], 0);
+    aerfa.resize(siz[0] * siz[1], 0);
+    batches = parms.getBatches();
+}
+
+vector<ll>& Picture::getSec() { return origin_sec; }
+
+vector<double> Picture::getSecFromDouble() {
+    if (origin_secCKKS.empty()) {
+        origin_secCKKS.reserve(origin_sec.size());
+        for (auto v : origin_sec) origin_secCKKS.push_back(static_cast<double>(v));
+    }
+    return origin_secCKKS;
+}
+
+vector<Ciphertext> Picture::getSecEn() { return pic_en; }
+
+int* Picture::getSiz() { return siz; }
+
+void Picture::generatePic(Params& parms, int randRange) {
+    for (int i = 0; i < siz[0]; ++i)
+        for (int j = 0; j < siz[1]; ++j) {
+            int idx = i * parms.W + j;
+            origin_pic[idx] = rand() % parms.ModP;
+            aerfa[idx] = static_cast<ll>(rand() % randRange);
+            origin_sec[idx] = aerfa[idx] * parms.ModP + origin_pic[idx];
+        }
+}
+
+void Picture::PrintParms(vector<ll>& vec) {
+    for (auto v : vec) cout << v << " "; 
+    cout << endl;
+}
+
+void Picture::pushCipher(const seal::Ciphertext& text) { pic_en.push_back(text); }
+
+void Picture::printPic() {
+    for (auto v : origin_pic) cout << v << " ";
+    cout << endl << endl;
+}
+
+void Picture::pushPies(ll pixes, int index) { origin_pic[index] = pixes; }
+
+vector<int> Picture::DecryPicBFV(Decryptor& decryptor, BatchEncoder& encoder,
+                                  Evaluator& evaluator, Norm& norm, Result& finalRes,
+                                  bool printAns) {
+    Plaintext text1;
+    vector<Ciphertext> a = pic_en;
+    vector<int64_t> temAns[10];
+    vector<int> ans_fl;
+    auto zeros_en = norm.zeros_en;
+    cout << "download from  the center server;\n"
+         << "\n\n\nstart to decoder locally\n";
+    double dur;
+    clock_t st = clock(), end;
+
+    for (size_t i = 0; i < a.size(); ++i) {
+        decryptor.decrypt(a[i], text1);
+        encoder.decode(text1, temAns[i]);
+    }
+    origin_pic.clear();
+    for (int i = 0; i < batches; ++i)
+        for (size_t j = 0; j < a.size(); ++j) {
+            ans_fl.push_back((around(temAns[j][i]) % norm.modP + norm.modP) % norm.modP);
+            norm.virErrorData.push_back(around(temAns[j][i]) - temAns[j][i]);
+        }
+    end = clock();
+    dur = static_cast<double>(end - st);
+    finalRes.encode0 = dur / CLOCKS_PER_SEC;
+    cout << "the decoding processing has finished. The total time cost is:"
+         << finalRes.encode0 << "s\n\n";
+
+    norm.virError = cal_err(norm.virErrorData);
+    printError(norm.virError);
+
+    if (printAns) {
+        cout << "the recovery result of pixes using FHE:\n";
+        for (auto v : ans_fl) cout << v << " ";
+        cout << endl;
+    }
+    return ans_fl;
+}
+
+vector<int> Picture::DecryPicCKKS(Decryptor& decryptor, CKKSEncoder& encoder,
+                                   Evaluator& evaluator, Norm& norm, Result& finalRes,
+                                   bool printAns) {
+    Plaintext text1;
+    vector<Ciphertext> a = pic_en;
+    vector<double> temAns[10];
+    vector<int> ans_fl;
+    cout << "download from  the center server;\n"
+         << "\n\n\nstart to decoder locally\n";
+    double dur;
+    clock_t st = clock(), end;
+
+    for (size_t i = 0; i < a.size(); ++i) {
+        decryptor.decrypt(a[i], text1);
+        encoder.decode(text1, temAns[i]);
+    }
+    origin_pic.clear();
+    for (int i = 0; i < batches; ++i)
+        for (size_t j = 0; j < a.size(); ++j) {
+            ans_fl.push_back(static_cast<int>(
+                (around(temAns[j][i]) + norm.modP) % norm.modP));
+            norm.virErrorData.push_back(around(temAns[j][i]) - temAns[j][i]);
+        }
+    end = clock();
+    dur = static_cast<double>(end - st);
+    finalRes.encode0 = dur / CLOCKS_PER_SEC;
+    cout << "the decoding processing has finished. The total time cost is:"
+         << finalRes.encode0 << "s\n\n";
+
+    norm.virError = cal_err(norm.virErrorData);
+    printError(norm.virError);
+
+    if (printAns) {
+        cout << "the recovery result of pixes using FHE:\n";
+        for (auto v : ans_fl) cout << v << " ";
+        cout << endl;
+    }
+    return ans_fl;
+}
+
+void Picture::setBatches(int batches) { this->batches = batches; }
+
+int Picture::getBatches() const { return batches; }
+
+void Picture::setPic(vector<int> a) { origin_pic = std::move(a); }
+
+double Picture::compare(const Picture& tem) const {
+    if (tem.origin_pic.size() != origin_pic.size()) return 0;
+    double flag = 0, total = origin_pic.size();
+    for (size_t i = 0; i < origin_pic.size(); ++i)
+        if (tem.origin_pic[i] == origin_pic[i]) ++flag;
+    cout << "the correct rate of ans is " << (flag / total * 100) << "%\n";
+    return flag / total * 100;
+}
+
+double Picture::compare(const Picture& tem, Norm& norm) const {
+    if (tem.origin_pic.size() != origin_pic.size())
+        throw runtime_error("sizes are different");
+    for (size_t i = 0; i < origin_pic.size(); ++i)
+        if (tem.origin_pic[i] != origin_pic[i]) {
+            norm.realErrorData.push_back(fabs(tem.origin_pic[i] - origin_pic[i]));
+            norm.realErrorIndex.push_back(static_cast<int>(i));
+        }
+    norm.realError = cal_err(norm.realErrorData);
+    printError(norm.realError);
+    return norm.realError.mean;
+}
+
+SharePic::SharePic(Params& parms) : range_x(parms.rangeX), P(parms.ModP) {}
+
+void SharePic::addNewPixByPlain(vector<ll> y, int x, bool BFV) {
+    ll f = 0;
+    int k = static_cast<int>(y.size());
+    for (int i = 0; i < k; ++i)
+        f += static_cast<ll>(pow(x, i)) * y[i];
+    if (BFV) X.push_back(x);
+    fx_div.push_back(static_cast<int>((f - f % P) / P));
+    fx.push_back(static_cast<int>(f % P));
+}
+
+vector<ll> SharePic::getX() { return X; }
+
+vector<int> SharePic::getfx() { return fx; }
+
+void SharePic::PrintFx() {
+    for (auto v : fx) cout << v << " ";
+    cout << endl << endl;
+}
+
+Ciphertext& SharePic::addNewPixByCipher(vector<Ciphertext> y, Evaluator& evaluator,
+                                        RelinKeys& rk, int index) {
+    static Ciphertext result;
+    result = y[0];
+    Ciphertext tem2;
+    for (size_t i = 1; i < y.size(); ++i) {
+        evaluator.exponentiate(x_en[index], static_cast<int>(i), rk, tem2);
+        evaluator.multiply_inplace(tem2, y[i]);
+        evaluator.add_inplace(result, tem2);
+    }
+    evaluator.relinearize_inplace(result, rk);
+    fx_en.push_back(result);
+    return result;
+}
+
+Ciphertext SharePic::generateCKKSShares(vector<Ciphertext> y, Evaluator& evaluator,
+                                    RelinKeys& rk, shared_ptr<seal::SEALContext>& context,
+                                    vector<Ciphertext>& ONES) {
+    size_t k = y.size();
+    Ciphertext ans = y[0], tem1;
+    for (size_t i = 1; i < k; ++i) {
+        vector<Ciphertext> tem;
+        tem.push_back(y[i]);
+        for (size_t j = 1; j <= i; ++j) tem.push_back(x_en[0]);
+        tem1 = cal_mut(tem, evaluator, rk, context, ONES);
+        add(evaluator, ans, tem1, context);
+    }
+    fx_en.push_back(ans);
+    return ans;
+}
+
+Ciphertext SharePic::generateBFVShares(vector<Ciphertext> y, Evaluator& evaluator,
+                                       RelinKeys& rk, shared_ptr<seal::SEALContext>& context,
+                                       Ciphertext& ONES) {
+    size_t k = y.size();
+    Ciphertext ans = y[0], tem1;
+    for (size_t i = 1; i < k; ++i) {
+        vector<Ciphertext> tem;
+        tem.push_back(y[i]);
+        for (size_t j = 1; j <= i; ++j) tem.push_back(x_en[0]);
+        tem1 = cal_mutBFV(tem, evaluator, rk, ONES);
+        evaluator.add_inplace(ans, tem1);
+    }
+    fx_en.push_back(ans);
+    return ans;
+}
+
+void SharePic::showShareCKKS(Decryptor& decryptor, CKKSEncoder& encoder, bool printAns) {
+    Plaintext tem;
+    vector<double> share_de;
+    decryptor.decrypt(fx_en[0], tem);
+    encoder.decode(tem, share_de);
+    bool flag = true;
+    for (int i = 0; i < X_len; ++i) {
+        if (printAns) cout << around(share_de[i]) % P << " ";
+        if (around(share_de[i]) % P != fx[i]) flag = false;
+    }
+    cout << (flag ? "the ans is correct" : "something is error!") << endl;
+}
+
+void SharePic::showShareBFV(Decryptor& decryptor, BatchEncoder& encoder, bool printAns) {
+    Plaintext tem;
+    vector<int64_t> share_de;
+    decryptor.decrypt(fx_en[0], tem);
+    encoder.decode(tem, share_de);
+    bool flag = true;
+    for (int i = 0; i < X_len; ++i) {
+        if (printAns) cout << around(share_de[i]) % P << " ";
+        if (around(share_de[i]) % P != fx[i]) flag = false;
+    }
+    cout << (flag ? "the ans is correct" : "something is error!") << endl;
+}

@@ -1,3 +1,12 @@
+/**
+ * @file mymath.h
+ * @brief Mathematical utility functions for polynomial operations
+ * @details Provides functions for polynomial evaluation, Lagrange interpolation,
+ *          and encrypted polynomial operations for BFV and CKKS schemes
+ * @version 1.0
+ * @date 2026
+ */
+
 #pragma once
 #include<cmath>
 #include<ctime>
@@ -8,287 +17,87 @@
 using namespace std;
 using namespace seal;
 
-void check1(Decryptor& decryptor, Ciphertext xx) {
-  int bits = decryptor.invariant_noise_budget(xx);
-  if (bits > 0) {
-    return;
-  }
-  else {
-    cout << "the noise is out of range;\n";
-    exit(0);
-  }
-}
+/**
+ * @brief Check noise budget of ciphertext
+ * @param decryptor Decryptor instance
+ * @param xx Ciphertext to check
+ */
+void check1(Decryptor& decryptor, Ciphertext xx);
 
+/**
+ * @brief Fast modular exponentiation
+ * @param base Base value
+ * @param mi Exponent
+ * @param MOD Modulus
+ * @return base^mi mod MOD
+ */
+long long mypow(long long base, int mi, int MOD);
 
-long long mypow(long long base, int mi, int MOD) {
-  long long ans = 1;
-  while (mi) {
-    if (mi % 2) {
-      ans = ans * base % MOD;
-    }
-    mi = mi >> 1;
-    base = base * base % MOD;
-  }
-  return ans;
-}
+/**
+ * @brief Compute difference polynomial coefficients (integer version)
+ * @details Computes D where D[i][j] = product of (x_i - x_j) for j != i
+ * @param X Input vector (will be negated in-place)
+ * @param k Size parameter
+ * @return Flattened D matrix
+ */
+vector<int> getD(vector<int>& X, int k);
 
-vector<int> getD(vector<int>& X, int k) {
-  vector<int> D[10];
-  vector<int>ans;
-  for (int i = 0; i < X.size(); i++)
-    X[i] = -X[i];
+/**
+ * @brief Compute difference polynomial coefficients (double version)
+ * @param X Input vector (will be negated in-place)
+ * @param k Size parameter
+ * @return Flattened D matrix
+ */
+vector<double> getD(vector<double>& X, int k);
 
-  for (int i = 0; i < k; i++) {//from x0 to xk-1
-    vector<int>b;
+/**
+ * @brief Compute difference polynomial coefficients (BFV ciphertext version)
+ * @param X Input ciphertext vector (will be negated in-place)
+ * @param evaluator Evaluator instance
+ * @param decryptor Decryptor instance
+ * @param relinkeys Relinization keys
+ * @param k Size parameter
+ * @param ZERO Encrypted zero
+ * @param ONE Encrypted one
+ * @return Encrypted D matrix
+ */
+vector<Ciphertext> getD(vector<Ciphertext>& X, Evaluator& evaluator, Decryptor& decryptor, RelinKeys relinkeys, int k, Ciphertext& ZERO, Ciphertext& ONE);
 
-    for (int j = 0; j < k; j++) {//the range of generate b are b 0~k-2
-      if (j == i)continue;
-      b.push_back(X[j]);
-    }
-    long long presum[10] = { 0,0,0,0,0,0,0,0,0,0 };
-    long long nsum[10] = { 0,0,0,0,0,0,0,0,0,0 };
-    for (int j = 0; j < k; j++) {
-      if (j == 0) {
-        D[i].push_back(1);
-      }
-      else if (j == 1) {
-        for (int ii = 1; ii < k; ii++) {
-          presum[ii] = presum[ii - 1] + b[ii - 1];//0~k-2
-        }
-        D[i].push_back(presum[k - j]);//1~k-1
-      }
-      else {
-        for (int ii = 1; ii <= k - j; ii++) {
-          long long tem = b[ii - 1] * (presum[k - j + 1] - presum[ii]);//get the presum
-          nsum[ii] = tem + nsum[ii - 1];
-        }
-        D[i].push_back(nsum[k - j]);
-        swap(presum, nsum);
-      }
-    }
-  }
-  for (int i = 0; i < k; i++) {
-    for (int j = 0; j < k; j++) {
-      ans.push_back(D[i][j]);
-    }
-  }
-  return ans;
-}
+/**
+ * @brief Compute difference polynomial coefficients (CKKS version)
+ * @param X Input ciphertext vector (will be negated in-place)
+ * @param evaluator Evaluator instance
+ * @param decryptor Decryptor instance
+ * @param relinkeys Relinization keys
+ * @param k Size parameter
+ * @param ZERO Encrypted zero
+ * @param ONES Vector of encrypted ones at different levels
+ * @param context SEAL context
+ * @return Encrypted D matrix
+ */
+vector<Ciphertext> getDCKKS(vector<Ciphertext>& X, Evaluator& evaluator, Decryptor& decryptor, RelinKeys relinkeys, int k, Ciphertext& ZERO, vector<Ciphertext>& ONES, shared_ptr<SEALContext>& context);
 
-vector<double> getD(vector<double>& X, int k) {
-  vector<int> D[10];
-  vector<double>ans;
-  for (int i = 0; i < X.size(); i++)
-    X[i] = -X[i];
+/**
+ * @brief Compute difference polynomial coefficients (BFV batch version)
+ * @param X Input ciphertext vector
+ * @param evaluator Evaluator instance
+ * @param decryptor Decryptor instance
+ * @param relinkeys Relinization keys
+ * @param k Size parameter
+ * @param ZERO Encrypted zero
+ * @param ONES Encrypted one
+ * @return Encrypted D matrix
+ */
+vector<Ciphertext> getDBFV(vector<Ciphertext>& X, Evaluator& evaluator, Decryptor& decryptor, RelinKeys relinkeys, int k, Ciphertext& ZERO, Ciphertext ONES);
 
-  for (int i = 0; i < k; i++) {//from x0 to xk-1
-    vector<int>b;
-
-    for (int j = 0; j < k; j++) {//the range of generate b are b 0~k-2
-      if (j == i)continue;
-      b.push_back(X[j]);
-    }
-    long long presum[10] = { 0,0,0,0,0,0,0,0,0,0 };
-    long long nsum[10] = { 0,0,0,0,0,0,0,0,0,0 };
-    for (int j = 0; j < k; j++) {
-      if (j == 0) {
-        D[i].push_back(1);
-      }
-      else if (j == 1) {
-        for (int ii = 1; ii < k; ii++) {
-          presum[ii] = presum[ii - 1] + b[ii - 1];//0~k-2
-        }
-        D[i].push_back(presum[k - j]);//1~k-1
-      }
-      else {
-        for (int ii = 1; ii <= k - j; ii++) {
-          long long tem = b[ii - 1] * (presum[k - j + 1] - presum[ii]);//get the presum
-          nsum[ii] = tem + nsum[ii - 1];
-        }
-        D[i].push_back(nsum[k - j]);
-        swap(presum, nsum);
-      }
-    }
-  }
-  for (int i = 0; i < k; i++) {
-    for (int j = 0; j < k; j++) {
-      ans.push_back(D[i][j]);
-    }
-  }
-  return ans;
-}
-
-
-vector<Ciphertext> getD(vector<Ciphertext>& X, Evaluator& evaluator, Decryptor& decryptor, RelinKeys relinkeys, int k, Ciphertext& ZERO, Ciphertext& ONE) {
-  vector<Ciphertext> D[10];
-  vector<Ciphertext>ans;
-
-  for (int i = 0; i < X.size(); i++) {
-    evaluator.sub(ZERO, X[i], X[i]);
-  }
-
-  for (int i = 0; i < k; i++) {//from x0 to xk-1
-    vector<Ciphertext>b;
-
-    for (int j = 0; j < k; j++) {//the range of generate b are b 0~k-2
-      if (j == i)continue;
-      b.push_back(X[j]);
-    }
-    Ciphertext presum[10] = { ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO };
-    Ciphertext nsum[10] = { ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO };
-    for (int j = 0; j < k; j++) {
-      if (j == 0) {
-        D[i].push_back(ONE);
-      }
-      else if (j == 1) {
-        for (int ii = 1; ii < k; ii++) {
-          evaluator.add(presum[ii - 1], b[ii - 1], presum[ii]);
-        }
-        evaluator.relinearize_inplace(presum[k - j], relinkeys);
-        //check1(decryptor, presum[k - j]);
-        D[i].push_back(presum[k - j]);//1~k-1
-      }
-      else {
-        for (int ii = 1; ii <= k - j; ii++) {
-          Ciphertext tem;
-          evaluator.sub(presum[k - j + 1], presum[ii], tem);
-          evaluator.multiply_inplace(tem, b[ii - 1]);
-          evaluator.relinearize_inplace(tem, relinkeys);
-          evaluator.add(tem, nsum[ii - 1], nsum[ii]);
-        }
-        evaluator.relinearize_inplace(nsum[k - j], relinkeys);
-        //check1(decryptor, nsum[k - j]);
-        D[i].push_back(nsum[k - j]);
-        swap(presum, nsum);
-      }
-    }
-  }
-  for (int i = 0; i < k; i++) {
-    for (int j = 0; j < k; j++) {
-      ans.push_back(D[i][j]);
-    }
-  }
-  return ans;
-}
-
-vector<Ciphertext> getDCKKS(vector<Ciphertext>& X, Evaluator& evaluator, Decryptor& decryptor, RelinKeys relinkeys, int k, Ciphertext& ZERO, vector<Ciphertext>& ONES, shared_ptr<SEALContext>& context) {
-  vector<Ciphertext> D[10];
-  vector<Ciphertext>ans;
-
-  for (int i = 0; i < X.size(); i++) {
-    evaluator.sub(ZERO, X[i], X[i]);
-  }
-
-  for (int i = 0; i < k; i++) {//from x0 to xk-1
-    vector<Ciphertext>b;
-
-    for (int j = 0; j < k; j++) {//the range of generate b are b 0~k-2
-      if (j == i)continue;
-      b.push_back(X[j]);
-    }
-    Ciphertext presum[10] = { ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO };
-    Ciphertext nsum[10] = { ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO };
-    for (int j = 0; j < k; j++) {
-      if (j == 0) {
-        D[i].push_back(ONES[ONES.size()-1]);
-      }
-      else if (j == 1) {
-        for (int ii = 1; ii < k; ii++) {
-          add(evaluator, presum[ii - 1], b[ii - 1], presum[ii], context);
-        }
-        //check1(decryptor, presum[k - j]);
-        D[i].push_back(presum[k - j]);//1~k-1
-      }
-      else {
-        for (int ii = 1; ii <= k - j; ii++) {
-          Ciphertext tem;
-          sub(evaluator,presum[k - j + 1], presum[ii], tem,context);
-          tem = cal_mut({ tem, b[ii - 1] },evaluator,relinkeys,context,ONES);
-          add(evaluator,tem, nsum[ii - 1], nsum[ii],context);
-        }
-        D[i].push_back(nsum[k - j]);
-        swap(presum, nsum);
-      }
-    }
-  }
-  for (int i = 0; i < k; i++) {
-    for (int j = 0; j < k; j++) {
-      ans.push_back(D[i][j]);
-    }
-  }
-  return ans;
-}
-
-vector<Ciphertext> getDBFV(vector<Ciphertext>& X, Evaluator& evaluator, Decryptor& decryptor, RelinKeys relinkeys, int k, Ciphertext& ZERO, Ciphertext ONES) {
-  vector<Ciphertext> D[10];
-  vector<Ciphertext>ans;
-
-  for (int i = 0; i < X.size(); i++) {
-    evaluator.sub(ZERO, X[i], X[i]);
-  }
-
-  for (int i = 0; i < k; i++) {//from x0 to xk-1
-    vector<Ciphertext>b;
-
-    for (int j = 0; j < k; j++) {//the range of generate b are b 0~k-2
-      if (j == i)continue;
-      b.push_back(X[j]);
-    }
-    Ciphertext presum[10] = { ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO };
-    Ciphertext nsum[10] = { ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO,ZERO };
-    for (int j = 0; j < k; j++) {
-      if (j == 0) {
-        D[i].push_back(ONES);
-      }
-      else if (j == 1) {
-        for (int ii = 1; ii < k; ii++) {
-          evaluator.add(presum[ii - 1], b[ii - 1], presum[ii]);
-        }
-        //check1(decryptor, presum[k - j]);
-        D[i].push_back(presum[k - j]);//1~k-1
-      }
-      else {
-        for (int ii = 1; ii <= k - j; ii++) {
-          Ciphertext tem;
-          evaluator.sub(presum[k - j + 1], presum[ii], tem);
-          evaluator.multiply_inplace(tem, b[ii - 1]);
-          evaluator.relinearize_inplace(tem, relinkeys);
-          evaluator.add(tem, nsum[ii - 1], nsum[ii]);
-        }
-        D[i].push_back(nsum[k - j]);
-        swap(presum, nsum);
-      }
-    }
-  }
-  for (int i = 0; i < k; i++) {
-    for (int j = 0; j < k; j++) {
-      ans.push_back(D[i][j]);
-    }
-  }
-  return ans;
-}
-
-
-
-Ciphertext mypow(Evaluator& evaluator,
-                       Ciphertext baseTE,
-                       Decryptor& decryptor,
-                       int mi,
-                       Ciphertext ONE,
-                       RelinKeys relinkeys)
-{
-    Ciphertext ans = ONE;
-    std::cout << "trying to cal the  invK\n";
-    while (mi) {
-        std::cout << "Noise budget of invK:"
-                  << decryptor.invariant_noise_budget(baseTE) << " bits\n";
-        if (mi & 1) {
-            evaluator.multiply_inplace(ans, baseTE);
-            evaluator.relinearize_inplace(ans, relinkeys);
-        }
-        mi >>= 1;
-        evaluator.multiply_inplace(baseTE, baseTE);
-        evaluator.relinearize_inplace(baseTE, relinkeys);
-    }
-    return ans;
-}
+/**
+ * @brief Power of ciphertext (with noise checking)
+ * @param evaluator Evaluator instance
+ * @param baseTE Base ciphertext
+ * @param decryptor Decryptor instance
+ * @param mi Exponent
+ * @param ONE Encrypted one
+ * @param relinkeys Relinization keys
+ * @return baseTE^mi
+ */
+Ciphertext mypow(Evaluator& evaluator, Ciphertext baseTE, Decryptor& decryptor, int mi, Ciphertext ONE, RelinKeys relinkeys);

@@ -1,3 +1,12 @@
+/**
+ * @file math_test.h
+ * @brief Mathematical test and utility functions for CKKS and BFV operations
+ * @details Provides core functions for ciphertext level management, polynomial multiplication,
+ *          scale fitting, and arithmetic operations on encrypted data
+ * @version 1.0
+ * @date 2026
+ */
+
 #pragma once
 #include<iostream>
 #include<fstream>
@@ -10,268 +19,162 @@ using namespace seal;
 
 using parms_id_type = parms_id_type;
 
-// the use of context is to check the chain-index of Ciphertext;
-int limit[] = { 2, 4, 8, 16, 32, 64, 128 };
+extern int limit[];
 
-/// <summary>
-/// get the level of Ciplhertext
-/// </summary>
-/// <param name="tem"></param>
-/// <param name="context"></param>
-/// <param name="tag">
-/// if tag=0 ,it means add, which is default situation;when tag = 1, it means mul
-/// </param>
-/// <returns></returns>
-int getLevel(Ciphertext& tem, shared_ptr<seal::SEALContext>& context, int tag=0) {
-  int level = context->get_context_data(tem.parms_id())->chain_index();
-  if (tag && !level) {
-    cout << "the scale is not support multiply again";
-    throw "the scale is not support multiply again";
-  }
-  else {
-    return level;
-  }
-}
+/**
+ * @brief Get ciphertext level from context
+ * @details Returns the chain index (level) of a ciphertext in the CKKS scheme
+ * @param tem Ciphertext to query
+ * @param context SEAL context
+ * @param tag If 1, throws exception if level is 0 (cannot multiply further)
+ * @return Chain index
+ */
+int getLevel(Ciphertext& tem, shared_ptr<seal::SEALContext>& context, int tag = 0);
 
-void modifyCipScale(Evaluator& evaluator, Ciphertext& tem, parms_id_type param_id, double scale) {
-  evaluator.mod_switch_to_inplace(tem, param_id);
-  tem.scale() = scale;
-}
+/**
+ * @brief Modify ciphertext scale and perform modulus switching
+ * @param evaluator Evaluator instance
+ * @param tem Ciphertext to modify
+ * @param param_id Target parameter ID
+ * @param scale Target scale
+ */
+void modifyCipScale(Evaluator& evaluator, Ciphertext& tem, parms_id_type param_id, double scale);
 
-int reSize(int tem) {
-  int i;
-  for (i = 0; i < 7; i++) {
-    if (tem <= limit[i])
-      break;
-  }
-  return limit[i];
-}
+/**
+ * @brief Resize to next power of 2
+ * @param tem Input value
+ * @return Resized value from limit array
+ */
+int reSize(int tem);
 
-void multiply(Ciphertext& tem1, Ciphertext tem2, Evaluator& evaluator, RelinKeys& relin_key) {
-  ios old_fmt(nullptr);
-  old_fmt.copyfmt(cout);
-  cout << fixed << setprecision(10);
-  evaluator.multiply_inplace(tem1, tem2);
-  evaluator.relinearize_inplace(tem1, relin_key);
-  evaluator.rescale_to_next_inplace(tem1);
-  cout.copyfmt(old_fmt);
-}
+/**
+ * @brief Multiply ciphertexts with rescaling (CKKS)
+ * @details Performs multiplication, relinearization, and rescaling
+ * @param tem1 First ciphertext (modified in-place)
+ * @param tem2 Second ciphertext
+ * @param evaluator Evaluator instance
+ * @param relin_key Relinization keys
+ */
+void multiply(Ciphertext& tem1, Ciphertext tem2, Evaluator& evaluator, RelinKeys& relin_key);
 
-void multiply1(Ciphertext& tem1, Ciphertext tem2, Evaluator& evaluator, RelinKeys& relin_key) {
-  evaluator.multiply_inplace(tem1, tem2);
-  evaluator.relinearize_inplace(tem1, relin_key);
-}
+/**
+ * @brief Multiply ciphertexts without rescaling (BFV)
+ * @param tem1 First ciphertext (modified in-place)
+ * @param tem2 Second ciphertext
+ * @param evaluator Evaluator instance
+ * @param relin_key Relinization keys
+ */
+void multiply1(Ciphertext& tem1, Ciphertext tem2, Evaluator& evaluator, RelinKeys& relin_key);
 
+/**
+ * @brief Fit ciphertext sizes (variant 2)
+ * @details Adjusts ciphertext scales and chain indices to match minimum level
+ * @param vec Vector of ciphertexts
+ * @param context SEAL context
+ * @param ONES Vector of encrypted ones at different levels
+ * @param evaluator Evaluator instance
+ * @param relin_keys Relinization keys
+ */
+void fitSize2(vector<Ciphertext>& vec, shared_ptr<seal::SEALContext>& context, vector<Ciphertext>& ONES, Evaluator& evaluator, RelinKeys& relin_keys);
 
-//mantually change the scale of Ciphertext and using mod_switch to change level 
-void fitSize2(vector<Ciphertext>& vec, shared_ptr<seal::SEALContext>& context, vector<Ciphertext>& ONES, Evaluator& evaluator, RelinKeys& relin_keys) {
-  if (vec.size() == 1)
-    return;
-  // change the scale and chain-index of  every element
-  int minn = 10, tem, minn_id = 0;
-  parms_id_type minn_p;
-  for (int i = 0; i < vec.size(); i++) {
-    tem = context->get_context_data(vec[i].parms_id())->chain_index();
-    //change point 1
-    if (minn > tem) {
-      minn = tem;
-      minn_p = vec[i].parms_id();
-      minn_id = i;
-    }
-  }
-  int  siz = vec.size();
-  int real_siz = reSize(siz);
+/**
+ * @brief Fit ciphertext sizes to match levels
+ * @details Aligns ciphertext chain indices by multiplying with ONES
+ * @param vec Vector of ciphertexts
+ * @param context SEAL context
+ * @param ONES Vector of encrypted ones at different levels
+ * @param evaluator Evaluator instance
+ * @param relin_keys Relinization keys
+ */
+void fitSize(vector<Ciphertext>& vec, shared_ptr<seal::SEALContext>& context, vector<Ciphertext>& ONES, Evaluator& evaluator, RelinKeys& relin_keys);
 
-  // if the chain_index is not the lowest index,
-  //we should change the chain-index of Ciphertext
-  for (int i = 0; i < siz; i++) {
-    tem = context->get_context_data(vec[i].parms_id())->chain_index();
-    if (tem > minn) {
-      // or using 2^40;
-      modifyCipScale(evaluator, vec[i], minn_p, vec[minn_id].scale());
-    }
-  }
-  for (int i = siz; i < real_siz; i++) {
-    vec.push_back(ONES[minn]);
-  }
-}
+/**
+ * @brief Fit ciphertext sizes (variant 4)
+ * @details Similar to fitSize but with different parameters
+ * @param vec Vector of ciphertexts
+ * @param context SEAL context
+ * @param ONES Vector of encrypted ones
+ * @param evaluator Evaluator instance
+ * @param relin_keys Relinization keys
+ */
+void fitSize4(vector<Ciphertext>& vec, shared_ptr<seal::SEALContext>& context, vector<Ciphertext>& ONES, Evaluator& evaluator, RelinKeys& relin_keys);
 
+/**
+ * @brief Compute product of ciphertext vector (CKKS)
+ * @details Performs tree-based multiplication with scale alignment
+ * @param vec Vector of ciphertexts to multiply
+ * @param evaluator Evaluator instance
+ * @param relin_keys Relinization keys
+ * @param context SEAL context
+ * @param ONES Vector of encrypted ones
+ * @return Product ciphertext
+ */
+Ciphertext cal_mut(vector<Ciphertext> vec, Evaluator& evaluator, RelinKeys& relin_keys, shared_ptr<seal::SEALContext>& context, vector<Ciphertext>& ONES);
 
-// the ONES is used to change Ciphertext.scale and reSize the vector
-void fitSize(vector<Ciphertext>& vec, shared_ptr<seal::SEALContext>& context, vector<Ciphertext>& ONES, Evaluator& evaluator, RelinKeys& relin_keys) {
-  if (vec.size() == 1)
-    return;
-  // change the scale and chain-index of  every element
-  int minn = 10, tem;
-  for (int i = 0; i < vec.size(); i++) {
-    tem = context->get_context_data(vec[i].parms_id())->chain_index();
-    minn = minn < tem ? minn : tem;
-  }
-  int  siz = vec.size();
-  int real_siz = reSize(siz);
+/**
+ * @brief Compute product of ciphertext vector (BFV)
+ * @param vec Vector of ciphertexts to multiply
+ * @param evaluator Evaluator instance
+ * @param relin_keys Relinization keys
+ * @param ONES Encrypted one
+ * @return Product ciphertext
+ */
+Ciphertext cal_mutBFV(vector<Ciphertext> vec, Evaluator& evaluator, RelinKeys& relin_keys, Ciphertext& ONES);
 
-  // if the chain_index is not the lowest index,we should change the chain-index of Ciphertext
-  for (int i = 0; i < siz; i++) {
-    tem = context->get_context_data(vec[i].parms_id())->chain_index();
-    while (tem > minn) {
-      multiply(vec[i], ONES[tem], evaluator, relin_keys);
-      tem--;
-    }
-  }
-  for (int i = siz; i < real_siz; i++) {
-    vec.push_back(ONES[minn]);
-  }
-}
+/**
+ * @brief Compute product of ciphertext vector (CKKS variant 1)
+ * @param vec Vector of ciphertexts to multiply
+ * @param evaluator Evaluator instance
+ * @param relin_keys Relinization keys
+ * @param context SEAL context
+ * @param ONES Vector of encrypted ones
+ * @param decryptor Decryptor instance
+ * @param encoder CKKS encoder
+ * @return Product ciphertext
+ */
+Ciphertext cal_mut1(vector<Ciphertext> vec, Evaluator& evaluator, RelinKeys& relin_keys, shared_ptr<seal::SEALContext>& context, vector<Ciphertext>& ONES, Decryptor& decryptor, CKKSEncoder& encoder);
 
-Ciphertext  cal_mut(vector<Ciphertext> vec, Evaluator& evaluator, RelinKeys& relin_keys, shared_ptr<seal::SEALContext>& context,vector<Ciphertext>& ONES) {
-  vector<Ciphertext> pre_ans;
-  // here is a problem: the ONES has to be contructed earlier; 
-  fitSize(vec, context, ONES, evaluator, relin_keys);
-  while (vec.size() > 1) {
-    for (int i = 0; i < vec.size(); i += 2) {
-      Ciphertext tem = vec[i];
-      //cout << context->get_context_data(tem.parms_id())->chain_index() << " " << tem.scale() << "    ";
-      multiply(tem, vec[i + 1], evaluator, relin_keys);
-      pre_ans.push_back(tem);
-      //cout << context->get_context_data(tem.parms_id())->chain_index() << " " << tem.scale() << endl;
-    }
-    vec = pre_ans;
-    pre_ans.clear();
-  }
-  return vec[0];
-}
+/**
+ * @brief Add ciphertexts with level alignment (in-place)
+ * @param evaluator Evaluator instance
+ * @param destinction Destination ciphertext
+ * @param tem2 Source ciphertext
+ * @param context SEAL context
+ */
+void add(Evaluator& evaluator, Ciphertext& destinction, Ciphertext& tem2, shared_ptr<seal::SEALContext>& context);
 
-/// <summary>
-/// the add funciotn of CKKS
-/// </summary>
-/// <param name="evaluator"></param>
-/// <param name="destinction"></param>
-/// <param name="tem2"></param>
-/// <param name="context"></param>
-void add(Evaluator& evaluator, Ciphertext& destinction, Ciphertext& tem2, shared_ptr<seal::SEALContext>& context) {
-  int level1 = getLevel(destinction, context);
-  int level2 = getLevel(tem2, context);
-  if (level1 < level2) {
-    modifyCipScale(evaluator, tem2, destinction.parms_id(), destinction.scale());
-  }
-  else if(level1>level2) {
-    modifyCipScale(evaluator, destinction, tem2.parms_id(), tem2.scale());
-  }
-  evaluator.add_inplace(destinction, tem2);
-}
+/**
+ * @brief Subtract ciphertexts with level alignment (in-place)
+ * @param evaluator Evaluator instance
+ * @param destinction Destination ciphertext
+ * @param tem2 Source ciphertext
+ * @param context SEAL context
+ */
+void sub(Evaluator& evaluator, Ciphertext& destinction, Ciphertext& tem2, shared_ptr<seal::SEALContext>& context);
 
-void sub(Evaluator& evaluator, Ciphertext& destinction, Ciphertext& tem2, shared_ptr<seal::SEALContext>& context) {
-  int level1 = getLevel(destinction, context);
-  int level2 = getLevel(tem2, context);
-  if (level1 < level2) {
-    modifyCipScale(evaluator, tem2, destinction.parms_id(), destinction.scale());
-  }
-  else if (level1 > level2) {
-    modifyCipScale(evaluator, destinction, tem2.parms_id(), tem2.scale());
-  }
-  evaluator.sub_inplace(destinction, tem2);
-}
+/**
+ * @brief Add ciphertexts with level alignment (output)
+ * @param evaluator Evaluator instance
+ * @param tem1 First ciphertext
+ * @param tem2 Second ciphertext
+ * @param destinction Result ciphertext
+ * @param context SEAL context
+ */
+void add(Evaluator& evaluator, Ciphertext& tem1, Ciphertext& tem2, Ciphertext& destinction, shared_ptr<seal::SEALContext>& context);
 
-void add(Evaluator& evaluator, Ciphertext& tem1, Ciphertext& tem2, Ciphertext& destinction, shared_ptr<seal::SEALContext>& context) {
-  int level1 = getLevel(tem1, context);
-  int level2 = getLevel(tem2, context);
-  if (level1 < level2) {
-    modifyCipScale(evaluator, tem2, tem1.parms_id(), tem1.scale());
-  }
-  else if (level1 > level2) {
-    modifyCipScale(evaluator, tem1, tem2.parms_id(), tem2.scale());
-  }
-  evaluator.add(tem1, tem2,destinction);
-}
+/**
+ * @brief Subtract ciphertexts with level alignment (output)
+ * @param evaluator Evaluator instance
+ * @param tem1 First ciphertext
+ * @param tem2 Second ciphertext
+ * @param destinction Result ciphertext
+ * @param context SEAL context
+ */
+void sub(Evaluator& evaluator, Ciphertext& tem1, Ciphertext& tem2, Ciphertext& destinction, shared_ptr<seal::SEALContext>& context);
 
-void sub(Evaluator& evaluator, Ciphertext& tem1, Ciphertext& tem2, Ciphertext& destinction, shared_ptr<seal::SEALContext>& context) {
-  int level1 = getLevel(tem1, context);
-  int level2 = getLevel(tem2, context);
-  if (level1 < level2) {
-    modifyCipScale(evaluator, tem2, tem1.parms_id(), tem1.scale());
-  }
-  else if (level1 > level2) {
-    modifyCipScale(evaluator, tem1, tem2.parms_id(), tem2.scale());
-  }
-  evaluator.sub(tem1, tem2, destinction);
-}
-
-int around(double x) {
-  return (x > 0 ? floor(x + 0.5) : ceil(x - 0.5));
-}
-
-// the ONES is used to change Ciphertext.scale and reSize the vector
-void fitSize(vector<Ciphertext>& vec, Ciphertext& ONES) {
-  if (vec.size() == 1)
-    return;
-
-  // modify the number of vec to be 2^n
-  int  siz = vec.size();
-  int real_siz = reSize(siz);
-  for (int i = siz; i < real_siz; i++) {
-    vec.push_back(ONES);
-  }
-}
-
-Ciphertext  cal_mutBFV(vector<Ciphertext> vec, Evaluator& evaluator, RelinKeys& relin_keys, Ciphertext& ONES) {
-  vector<Ciphertext> pre_ans;
-  // here is a problem: the ONES has to be contructed earlier; 
-  fitSize(vec, ONES);
-  while (vec.size() > 1) {
-    for (int i = 0; i < vec.size(); i += 2) {
-      Ciphertext tem = vec[i];
-      multiply1(tem, vec[i + 1], evaluator, relin_keys);
-      pre_ans.push_back(tem);
-    }
-    vec = pre_ans;
-    pre_ans.clear();
-  }
-  return vec[0];
-}
-
-
-// the ONES is used to change Ciphertext.scale and reSize the vector
-void fitSize4(vector<Ciphertext>& vec, shared_ptr<seal::SEALContext>& context, vector<Ciphertext>& ONES, Evaluator& evaluator, RelinKeys& relin_keys) {
-  if (vec.size() == 1)
-    return;
-  // change the scale and chain-index of  every element
-  int minn = 10, tem;
-  for (int i = 0; i < vec.size(); i++) {
-    tem = context->get_context_data(vec[i].parms_id())->chain_index();
-    minn = minn < tem ? minn : tem;
-  }
-  int  siz = vec.size();
-  int real_siz = reSize(siz);
-
-  // if the chain_index is not the lowest index,we should change the chain-index of Ciphertext
-  for (int i = 0; i < siz; i++) {
-    tem = context->get_context_data(vec[i].parms_id())->chain_index();
-    while (tem > minn) {
-      //cout << context->get_context_data(vec[i].parms_id())->chain_index() << " " << context->get_context_data(ONES[tem].parms_id())->chain_index();
-      multiply(vec[i], ONES[tem], evaluator, relin_keys);
-      tem--;
-    }
-  }
-  for (int i = siz; i < real_siz; i++) {
-    vec.push_back(ONES[minn]);
-  }
-}
-
-Ciphertext  cal_mut1(vector<Ciphertext> vec, Evaluator& evaluator, RelinKeys& relin_keys, shared_ptr<seal::SEALContext>& context, vector<Ciphertext>& ONES, Decryptor& decryptor, CKKSEncoder& encoder) {
-  vector<Ciphertext> pre_ans;
-  // here is a problem: the ONES has to be contructed earlier; 
-  fitSize4(vec, context, ONES, evaluator, relin_keys);
-  while (vec.size() > 1) {
-    for (int i = 0; i < vec.size(); i += 2) {
-      Ciphertext tem = vec[i];
-      //cout << context->get_context_data(tem.parms_id())->chain_index() << " " << tem.scale() << "    ";
-      multiply(tem, vec[i + 1], evaluator, relin_keys);
-      pre_ans.push_back(tem);
-      //PrintDeVec(decryptor, encoder, tem);
-      //cout << context->get_context_data(tem.parms_id())->chain_index() << " " << tem.scale() << endl;
-    }
-    vec = pre_ans;
-    pre_ans.clear();
-  }
-  return vec[0];
-}
+/**
+ * @brief Round to nearest integer
+ * @param x Input value
+ * @return Rounded integer
+ */
+int around(double x);

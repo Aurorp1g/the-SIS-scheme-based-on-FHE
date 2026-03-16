@@ -3,11 +3,11 @@
 
 #pragma once
 
+#include "seal/randomgen.h"
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <stdexcept>
-#include <limits>
-#include "seal/randomgen.h"
 
 namespace seal
 {
@@ -29,8 +29,7 @@ namespace seal
         @param[in] generator A backing UniformRandomGenerator instance
         @throws std::invalid_argument if generator is null
         */
-        RandomToStandardAdapter(
-            std::shared_ptr<UniformRandomGenerator> generator) : generator_(generator)
+        RandomToStandardAdapter(std::shared_ptr<UniformRandomGenerator> generator) : generator_(generator)
         {
             if (!generator_)
             {
@@ -41,7 +40,7 @@ namespace seal
         /**
         Returns a new random number from the backing UniformRandomGenerator.
         */
-        result_type operator()()
+        SEAL_NODISCARD inline result_type operator()()
         {
             return generator_->generate();
         }
@@ -49,7 +48,7 @@ namespace seal
         /**
         Returns the backing UniformRandomGenerator.
         */
-        auto generator() const noexcept
+        SEAL_NODISCARD inline auto generator() const noexcept
         {
             return generator_;
         }
@@ -57,7 +56,7 @@ namespace seal
         /**
         Returns the smallest possible output value.
         */
-        static constexpr result_type min() noexcept
+        SEAL_NODISCARD inline static constexpr result_type min() noexcept
         {
             return std::numeric_limits<result_type>::min();
         }
@@ -65,7 +64,7 @@ namespace seal
         /**
         Returns the largest possible output value.
         */
-        static constexpr result_type max() noexcept
+        SEAL_NODISCARD static constexpr result_type max() noexcept
         {
             return std::numeric_limits<result_type>::max();
         }
@@ -73,4 +72,4 @@ namespace seal
     private:
         std::shared_ptr<UniformRandomGenerator> generator_;
     };
-}
+} // namespace seal

@@ -41,23 +41,29 @@ option(BUILD_EXAMPLES "Build examples" ON)
 set(SEAL_ROOT_DIR ${CMAKE_SOURCE_DIR}/plugins/SEAL)
 
 # SEAL库检测和配置
+# 检查不同版本的SEAL库文件
 if(EXISTS "${SEAL_ROOT_DIR}/lib/libseal.a")
     set(SEAL_INCLUDE_DIR ${SEAL_ROOT_DIR}/include)
     set(SEAL_LIBRARIES ${SEAL_ROOT_DIR}/lib/libseal.a)
     set(SEAL_FOUND TRUE)
     message(STATUS "找到SEAL库: ${SEAL_LIBRARIES}")
-    
-    # 检查SEAL版本
-    if(EXISTS "${SEAL_ROOT_DIR}/include/seal/util/config.h")
-        file(STRINGS "${SEAL_ROOT_DIR}/include/seal/util/config.h" SEAL_VERSION_LINE REGEX "^#define SEAL_VERSION")
-        if(SEAL_VERSION_LINE)
-            string(REGEX REPLACE "^#define SEAL_VERSION \"([^\"]+)\"" "\\1" SEAL_VERSION "${SEAL_VERSION_LINE}")
-            message(STATUS "SEAL库版本: ${SEAL_VERSION}")
-        endif()
-    endif()
+elseif(EXISTS "${SEAL_ROOT_DIR}/lib/libseal-4.1.a")
+    set(SEAL_INCLUDE_DIR ${SEAL_ROOT_DIR}/include)
+    set(SEAL_LIBRARIES ${SEAL_ROOT_DIR}/lib/libseal-4.1.a)
+    set(SEAL_FOUND TRUE)
+    message(STATUS "找到SEAL库: ${SEAL_LIBRARIES}")
 else()
     set(SEAL_FOUND FALSE)
     message(FATAL_ERROR "未找到SEAL库，请确保SEAL库已正确安装在plugins/SEAL目录下")
+endif()
+
+# 检查SEAL版本
+if(EXISTS "${SEAL_ROOT_DIR}/include/seal/util/config.h")
+    file(STRINGS "${SEAL_ROOT_DIR}/include/seal/util/config.h" SEAL_VERSION_LINE REGEX "^#define SEAL_VERSION")
+    if(SEAL_VERSION_LINE)
+        string(REGEX REPLACE "^#define SEAL_VERSION \"([^\"]+)\"" "\\1" SEAL_VERSION "${SEAL_VERSION_LINE}")
+        message(STATUS "SEAL库版本: ${SEAL_VERSION}")
+    endif()
 endif()
 
 # 创建主可执行文件
@@ -81,8 +87,14 @@ target_compile_options(sis-scheme-main PRIVATE
 )
 
 # 链接SEAL库
-target_link_libraries(sis-scheme-main PRIVATE
-    ${SEAL_LIBRARIES}
+target_link_libraries(sis-scheme-main 
+    PRIVATE 
+        ${SEAL_LIBRARIES}
+        z           # zlib
+        zstd        # zstd 压缩库
+        bcrypt      # Windows 加密 API（如果已有则保留）
+        crypt32     # Windows 加密 API（如果已有则保留）
+        ws2_32      # Windows Socket API（如果已有则保留）
 )
 
 # Windows平台特定链接库

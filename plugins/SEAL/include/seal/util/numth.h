@@ -3,27 +3,54 @@
 
 #pragma once
 
-#include <stdexcept>
-#include <cstdint>
-#include <vector>
-#include <tuple>
-#include "seal/smallmodulus.h"
+#include "seal/memorymanager.h"
+#include "seal/modulus.h"
 #include "seal/util/common.h"
+#include "seal/util/defines.h"
+#include "seal/util/pointer.h"
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <stdexcept>
+#include <tuple>
+#include <vector>
 
 namespace seal
 {
     namespace util
     {
-        inline std::uint64_t gcd(std::uint64_t x, std::uint64_t y)
+        SEAL_NODISCARD inline std::vector<int> naf(int value)
+        {
+            std::vector<int> res;
+
+            // Record the sign of the original value and compute abs
+            bool sign = value < 0;
+            value = std::abs(value);
+
+            // Transform to non-adjacent form (NAF)
+            for (int i = 0; value; i++)
+            {
+                int zi = (value & int(0x1)) ? 2 - (value & int(0x3)) : 0;
+                value = (value - zi) >> 1;
+                if (zi)
+                {
+                    res.push_back((sign ? -zi : zi) * (1 << i));
+                }
+            }
+
+            return res;
+        }
+
+        SEAL_NODISCARD inline std::uint64_t gcd(std::uint64_t x, std::uint64_t y)
         {
 #ifdef SEAL_DEBUG
             if (x == 0)
             {
-                std::invalid_argument("x cannot be zero");
+                throw std::invalid_argument("x cannot be zero");
             }
             if (y == 0)
             {
-                std::invalid_argument("y cannot be zero");
+                throw std::invalid_argument("y cannot be zero");
             }
 #endif
             if (x < y)
@@ -48,7 +75,7 @@ namespace seal
             }
         }
 
-        inline auto xgcd(std::uint64_t x, std::uint64_t y)
+        SEAL_NODISCARD inline auto xgcd(std::uint64_t x, std::uint64_t y)
             -> std::tuple<std::uint64_t, std::int64_t, std::int64_t>
         {
             /* Extended GCD:
@@ -58,11 +85,11 @@ namespace seal
 #ifdef SEAL_DEBUG
             if (x == 0)
             {
-                std::invalid_argument("x cannot be zero");
+                throw std::invalid_argument("x cannot be zero");
             }
             if (y == 0)
             {
-                std::invalid_argument("y cannot be zero");
+                throw std::invalid_argument("y cannot be zero");
             }
 #endif
             std::int64_t prev_a = 1;
@@ -78,72 +105,55 @@ namespace seal
                 y = util::safe_cast<std::uint64_t>(temp);
 
                 temp = a;
-                a = util::sub_safe(prev_a, mul_safe(q, a));
+                a = util::sub_safe(prev_a, util::mul_safe(q, a));
                 prev_a = temp;
 
                 temp = b;
-                b = util::sub_safe(prev_b, mul_safe(q, b));
+                b = util::sub_safe(prev_b, util::mul_safe(q, b));
                 prev_b = temp;
             }
             return std::make_tuple(x, prev_a, prev_b);
         }
 
-        inline bool try_mod_inverse(std::uint64_t value,
-            std::uint64_t modulus, std::uint64_t &result)
+        SEAL_NODISCARD inline bool are_coprime(std::uint64_t x, std::uint64_t y) noexcept
         {
-#ifdef SEAL_DEBUG
-            if (value == 0)
-            {
-                std::invalid_argument("value cannot be zero");
-            }
-            if (modulus <= 1)
-            {
-                std::invalid_argument("modulus must be at least 2");
-            }
-#endif
-            auto gcd_tuple = xgcd(value, modulus);
-            if (std::get<0>(gcd_tuple) != 1)
-            {
-                return false;
-            }
-            else if (std::get<1>(gcd_tuple) < 0)
-            {
-                result = static_cast<std::uint64_t>(std::get<1>(gcd_tuple)) + modulus;
-                return true;
-            }
-            else
-            {
-                result = static_cast<std::uint64_t>(std::get<1>(gcd_tuple));
-                return true;
-            }
+            return !(gcd(x, y) > 1);
         }
 
-        std::vector<std::uint64_t> multiplicative_orders(
-            std::vector<std::uint64_t> conjugate_classes,
-            std::uint64_t modulus);
+        SEAL_NODISCARD std::vector<std::uint64_t> multiplicative_orders(
+            std::vector<std::uint64_t> conjugate_classes, std::uint64_t modulus);
 
-        std::vector<std::uint64_t> conjugate_classes(std::uint64_t modulus,
-            std::uint64_t subgroup_generator);
+        SEAL_NODISCARD std::vector<std::uint64_t> conjugate_classes(
+            std::uint64_t modulus, std::uint64_t subgroup_generator);
 
-        void babystep_giantstep(std::uint64_t modulus,
-            std::vector<std::uint64_t> &baby_steps,
-            std::vector<std::uint64_t> &giant_steps);
+        void babystep_giantstep(
+            std::uint64_t modulus, std::vector<std::uint64_t> &baby_steps, std::vector<std::uint64_t> &giant_steps);
 
-        auto decompose_babystep_giantstep(
-            std::uint64_t modulus,
-            std::uint64_t input,
-            const std::vector<std::uint64_t> &baby_steps,
-            const std::vector<std::uint64_t> &giant_steps)
-            -> std::pair<std::size_t, std::size_t>;
+        SEAL_NODISCARD auto decompose_babystep_giantstep(
+            std::uint64_t modulus, std::uint64_t input, const std::vector<std::uint64_t> &baby_steps,
+            const std::vector<std::uint64_t> &giant_steps) -> std::pair<std::size_t, std::size_t>;
 
-        bool is_prime(const SmallModulus &modulus, std::size_t num_rounds = 40);
+        SEAL_NODISCARD bool is_prime(const Modulus &modulus, std::size_t num_rounds = 40);
 
-        std::vector<SmallModulus> get_primes(std::size_t ntt_size, int bit_size,
-            std::size_t count);
+        // Generate a vector of primes with "bit_size" bits that are congruent to 1 modulo "factor"
+        SEAL_NODISCARD std::vector<Modulus> get_primes(std::uint64_t factor, int bit_size, std::size_t count);
 
-        inline SmallModulus get_prime(std::size_t ntt_size, int bit_size)
+        // Generate one prime with "bit_size" bits that are congruent to 1 modulo "factor"
+        SEAL_NODISCARD inline Modulus get_prime(std::uint64_t factor, int bit_size)
         {
-            return get_primes(ntt_size, bit_size, 1)[0];
+            return get_primes(factor, bit_size, 1)[0];
         }
-    }
-}
+
+        bool try_invert_uint_mod(std::uint64_t value, std::uint64_t modulus, std::uint64_t &result);
+
+        bool is_primitive_root(std::uint64_t root, std::uint64_t degree, const Modulus &prime_modulus);
+
+        // Try to find a primitive degree-th root of unity modulo small prime
+        // modulus, where degree must be a power of two.
+        bool try_primitive_root(std::uint64_t degree, const Modulus &prime_modulus, std::uint64_t &destination);
+
+        // Try to find the smallest (as integer) primitive degree-th root of
+        // unity modulo small prime modulus, where degree must be a power of two.
+        bool try_minimal_primitive_root(std::uint64_t degree, const Modulus &prime_modulus, std::uint64_t &destination);
+    } // namespace util
+} // namespace seal

@@ -8,7 +8,7 @@
 using namespace std;
 using namespace seal;
 
-using parms_id_type = util::HashFunction::sha3_block_type;
+using parms_id_type = parms_id_type;
 
 // the use of context is to check the chain-index of Ciphertext;
 int limit[] = { 2, 4, 8, 16, 32, 64, 128 };
@@ -33,7 +33,7 @@ int getLevel(Ciphertext& tem, shared_ptr<seal::SEALContext>& context, int tag=0)
   }
 }
 
-void modifyCipScale(Evaluator& evaluator, Ciphertext& tem,parms_id_type param_id,double scale) {
+void modifyCipScale(Evaluator& evaluator, Ciphertext& tem, parms_id_type param_id, double scale) {
   evaluator.mod_switch_to_inplace(tem, param_id);
   tem.scale() = scale;
 }

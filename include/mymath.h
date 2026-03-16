@@ -1,6 +1,6 @@
 #pragma once
 #include<cmath>
-#include<time.h>
+#include<ctime>
 #include<vector>
 #include "seal/seal.h"
 #include"math_test.h"
@@ -171,7 +171,7 @@ vector<Ciphertext> getD(vector<Ciphertext>& X, Evaluator& evaluator, Decryptor& 
   return ans;
 }
 
-vector<Ciphertext> getDCKKS(vector<Ciphertext>& X, Evaluator& evaluator, Decryptor& decryptor, RelinKeys relinkeys, int k, Ciphertext& ZERO, vector<Ciphertext>& ONES, shared_ptr<seal::SEALContext>& context) {
+vector<Ciphertext> getDCKKS(vector<Ciphertext>& X, Evaluator& evaluator, Decryptor& decryptor, RelinKeys relinkeys, int k, Ciphertext& ZERO, vector<Ciphertext>& ONES, shared_ptr<SEALContext>& context) {
   vector<Ciphertext> D[10];
   vector<Ciphertext>ans;
 
@@ -270,19 +270,25 @@ vector<Ciphertext> getDBFV(vector<Ciphertext>& X, Evaluator& evaluator, Decrypto
 
 
 
-Ciphertext mypow(Evaluator& evaluator, Ciphertext baseTE, Decryptor& decryptor, int mi, Ciphertext ONE, RelinKeys relinkeys, IntegerEncoder& encoder) {//the important shortcut is the number is too big to be a effective scheme;
-  Ciphertext ans = ONE;
-  Plaintext plain;
-  cout << "trying to cal the  invK\n";
-  while (mi) {
-    cout << "Noise budget of invK:" << decryptor.invariant_noise_budget(baseTE) << "bits" << endl;
-    if (mi % 2) {
-      evaluator.multiply_inplace(ans, baseTE);
-      evaluator.relinearize_inplace(ans, relinkeys);
+Ciphertext mypow(Evaluator& evaluator,
+                       Ciphertext baseTE,
+                       Decryptor& decryptor,
+                       int mi,
+                       Ciphertext ONE,
+                       RelinKeys relinkeys)
+{
+    Ciphertext ans = ONE;
+    std::cout << "trying to cal the  invK\n";
+    while (mi) {
+        std::cout << "Noise budget of invK:"
+                  << decryptor.invariant_noise_budget(baseTE) << " bits\n";
+        if (mi & 1) {
+            evaluator.multiply_inplace(ans, baseTE);
+            evaluator.relinearize_inplace(ans, relinkeys);
+        }
+        mi >>= 1;
+        evaluator.multiply_inplace(baseTE, baseTE);
+        evaluator.relinearize_inplace(baseTE, relinkeys);
     }
-    mi = mi >> 1;
-    evaluator.multiply_inplace(baseTE, baseTE);
-    evaluator.relinearize_inplace(baseTE, relinkeys);
-  }
-  return ans;
+    return ans;
 }

@@ -3,19 +3,22 @@
 
 #pragma once
 
+#include "seal/context.h"
+#include "seal/dynarray.h"
+#include "seal/encryptionparams.h"
+#include "seal/memorymanager.h"
+#include "seal/valcheck.h"
+#include "seal/version.h"
+#include "seal/util/common.h"
+#include "seal/util/defines.h"
+#include "seal/util/polycore.h"
+#include <algorithm>
+#include <functional>
 #include <stdexcept>
 #include <string>
-#include <iostream>
-#include <algorithm>
-#include <memory>
-#include "seal/util/common.h"
-#include "seal/util/polycore.h"
-#include "seal/util/defines.h"
-#include "seal/memorymanager.h"
-#include "seal/encryptionparams.h"
-#include "seal/intarray.h"
-#include "seal/context.h"
-#include "seal/valcheck.h"
+#ifdef SEAL_USE_MSGSL
+#include "gsl/span"
+#endif
 
 namespace seal
 {
@@ -35,8 +38,8 @@ namespace seal
     the desired capacity to the constructor as an extra argument, or by calling
     the reserve function at any time.
 
-    When the scheme is scheme_type::BFV each coefficient of a plaintext is a 64-bit
-    word, but when the scheme is scheme_type::CKKS the plaintext is by default
+    When the scheme is scheme_type::bfv each coefficient of a plaintext is a 64-bit
+    word, but when the scheme is scheme_type::ckks the plaintext is by default
     stored in an NTT transformed form with respect to each of the primes in the
     coefficient modulus. Thus, the size of the allocation that is needed is the
     size of the coefficient modulus (number of primes) times the degree of the
@@ -55,18 +58,14 @@ namespace seal
     public:
         using pt_coeff_type = std::uint64_t;
 
-        using size_type = IntArray<pt_coeff_type>::size_type;
-
         /**
         Constructs an empty plaintext allocating no memory.
 
         @param[in] pool The MemoryPoolHandle pointing to a valid memory pool
         @throws std::invalid_argument if pool is uninitialized
         */
-        Plaintext(MemoryPoolHandle pool = MemoryManager::GetPool()) :
-            data_(std::move(pool))
-        {
-        }
+        Plaintext(MemoryPoolHandle pool = MemoryManager::GetPool()) : data_(std::move(pool))
+        {}
 
         /**
         Constructs a plaintext representing a constant polynomial 0. The coefficient
@@ -79,11 +78,9 @@ namespace seal
         @throws std::invalid_argument if coeff_count is negative
         @throws std::invalid_argument if pool is uninitialized
         */
-        explicit Plaintext(size_type coeff_count,
-            MemoryPoolHandle pool = MemoryManager::GetPool()) :
-            data_(coeff_count, std::move(pool))
-        {
-        }
+        explicit Plaintext(std::size_t coeff_count, MemoryPoolHandle pool = MemoryManager::GetPool())
+            : coeff_count_(coeff_count), data_(coeff_count_, std::move(pool))
+        {}
 
         /**
         Constructs a plaintext representing a constant polynomial 0. The coefficient
@@ -97,12 +94,41 @@ namespace seal
         @throws std::invalid_argument if coeff_count is negative
         @throws std::invalid_argument if pool is uninitialized
         */
-        explicit Plaintext(size_type capacity, size_type coeff_count,
-            MemoryPoolHandle pool = MemoryManager::GetPool()) :
-            data_(capacity, coeff_count, std::move(pool))
-        {
-        }
+        explicit Plaintext(
+            std::size_t capacity, std::size_t coeff_count, MemoryPoolHandle pool = MemoryManager::GetPool())
+            : coeff_count_(coeff_count), data_(capacity, coeff_count_, std::move(pool))
+        {}
+#ifdef SEAL_USE_MSGSL
+        /**
+        Constructs a plaintext representing a polynomial with given coefficient
+        values. The coefficient count of the polynomial is set to the number of
+        coefficient values provided, and the capacity is set to the given value.
 
+        @param[in] coeffs Desired values of the plaintext coefficients
+        @param[in] capacity The capacity
+        @param[in] pool The MemoryPoolHandle pointing to a valid memory pool
+        @throws std::invalid_argument if capacity is less than the size of coeffs
+        @throws std::invalid_argument if pool is uninitialized
+        */
+        explicit Plaintext(
+            gsl::span<const pt_coeff_type> coeffs, std::size_t capacity,
+            MemoryPoolHandle pool = MemoryManager::GetPool())
+            : coeff_count_(coeffs.size()), data_(coeffs, capacity, std::move(pool))
+        {}
+
+        /**
+        Constructs a plaintext representing a polynomial with given coefficient
+        values. The coefficient count of the polynomial is set to the number of
+        coefficient values provided, and the capacity is set to the same value.
+
+        @param[in] coeffs Desired values of the plaintext coefficients
+        @param[in] pool The MemoryPoolHandle pointing to a valid memory pool
+        @throws std::invalid_argument if pool is uninitialized
+        */
+        explicit Plaintext(gsl::span<const pt_coeff_type> coeffs, MemoryPoolHandle pool = MemoryManager::GetPool())
+            : coeff_count_(coeffs.size()), data_(coeffs, std::move(pool))
+        {}
+#endif
         /**
         Constructs a plaintext from a given hexadecimal string describing the
         plaintext polynomial.
@@ -131,36 +157,34 @@ namespace seal
         format
         @throws std::invalid_argument if pool is uninitialized
         */
-        Plaintext(const std::string &hex_poly,
-            MemoryPoolHandle pool = MemoryManager::GetPool()) :
-            data_(std::move(pool))
+        Plaintext(const std::string &hex_poly, MemoryPoolHandle pool = MemoryManager::GetPool())
+            : data_(std::move(pool))
         {
-            operator =(hex_poly);
+            operator=(hex_poly);
         }
 
         /**
-        Constructs a new plaintext by copying a given one.
+        Creates a new plaintext by copying a given one.
 
         @param[in] copy The plaintext to copy from
         */
         Plaintext(const Plaintext &copy) = default;
 
         /**
-        Constructs a new plaintext by moving a given one.
+        Creates a new plaintext by moving a given one.
 
         @param[in] source The plaintext to move from
         */
         Plaintext(Plaintext &&source) = default;
 
         /**
-        Constructs a new plaintext by copying a given one.
+        Creates a new plaintext by copying a given one.
 
         @param[in] copy The plaintext to copy from
         @param[in] pool The MemoryPoolHandle pointing to a valid memory pool
         @throws std::invalid_argument if pool is uninitialized
         */
-        Plaintext(const Plaintext &copy, MemoryPoolHandle pool) :
-            Plaintext(std::move(pool))
+        Plaintext(const Plaintext &copy, MemoryPoolHandle pool) : Plaintext(std::move(pool))
         {
             *this = copy;
         }
@@ -173,13 +197,14 @@ namespace seal
         @throws std::invalid_argument if capacity is negative
         @throws std::logic_error if the plaintext is NTT transformed
         */
-        void reserve(size_type capacity)
+        void reserve(std::size_t capacity)
         {
             if (is_ntt_form())
             {
                 throw std::logic_error("cannot reserve for an NTT transformed Plaintext");
             }
             data_.reserve(capacity);
+            coeff_count_ = data_.size();
         }
 
         /**
@@ -200,6 +225,7 @@ namespace seal
         inline void release() noexcept
         {
             parms_id_ = parms_id_zero;
+            coeff_count_ = 0;
             scale_ = 1.0;
             data_.release();
         }
@@ -213,13 +239,14 @@ namespace seal
         @throws std::invalid_argument if coeff_count is negative
         @throws std::logic_error if the plaintext is NTT transformed
         */
-        inline void resize(size_type coeff_count)
+        inline void resize(std::size_t coeff_count)
         {
             if (is_ntt_form())
             {
                 throw std::logic_error("cannot reserve for an NTT transformed Plaintext");
             }
             data_.resize(coeff_count);
+            coeff_count_ = coeff_count;
         }
 
         /**
@@ -227,18 +254,18 @@ namespace seal
 
         @param[in] assign The plaintext to copy from
         */
-        Plaintext &operator =(const Plaintext &assign) = default;
+        Plaintext &operator=(const Plaintext &assign) = default;
 
         /**
         Moves a given plaintext to the current one.
 
         @param[in] assign The plaintext to move from
         */
-        Plaintext &operator =(Plaintext &&assign) = default;
+        Plaintext &operator=(Plaintext &&assign) = default;
 
         /**
         Sets the value of the current plaintext to the polynomial represented by
-        the a given hexadecimal string.
+        the given hexadecimal string.
 
         The string description of the polynomial must adhere to the format returned
         by to_string(), which is of the form "7FFx^3 + 1x^1 + 3" and summarized
@@ -262,22 +289,39 @@ namespace seal
         format
         @throws std::invalid_argument if the coefficients of hex_poly are too wide
         */
-        Plaintext &operator =(const std::string &hex_poly);
+        Plaintext &operator=(const std::string &hex_poly);
 
         /**
-        Sets the value of the current plaintext to a given constant polynomial.
-        The coefficient count is set to one.
+        Sets the value of the current plaintext to a given constant polynomial and
+        sets the parms_id to parms_id_zero, effectively marking the plaintext as
+        not NTT transformed. The coefficient count is set to one.
 
         @param[in] const_coeff The constant coefficient
-        @throws std::logic_error if the plaintext is NTT transformed
         */
-        Plaintext &operator =(pt_coeff_type const_coeff)
+        Plaintext &operator=(pt_coeff_type const_coeff)
         {
             data_.resize(1);
             data_[0] = const_coeff;
+            coeff_count_ = 1;
+            parms_id_ = parms_id_zero;
             return *this;
         }
+#ifdef SEAL_USE_MSGSL
+        /**
+        Sets the coefficients of the current plaintext to given values and sets
+        the parms_id to parms_id_zero, effectively marking the plaintext as not
+        NTT transformed.
 
+        @param[in] coeffs Desired values of the plaintext coefficients
+        */
+        Plaintext &operator=(gsl::span<const pt_coeff_type> coeffs)
+        {
+            data_ = coeffs;
+            coeff_count_ = coeffs.size();
+            parms_id_ = parms_id_zero;
+            return *this;
+        }
+#endif
         /**
         Sets a given range of coefficients of a plaintext polynomial to zero; does
         nothing if length is zero.
@@ -286,15 +330,16 @@ namespace seal
         @param[in] length The number of coefficients to set to zero
         @throws std::out_of_range if start_coeff + length - 1 is not within [0, coeff_count)
         */
-        inline void set_zero(size_type start_coeff, size_type length)
+        inline void set_zero(std::size_t start_coeff, std::size_t length)
         {
             if (!length)
             {
                 return;
             }
-            if (start_coeff + length - 1 >= coeff_count())
+            if (start_coeff + length - 1 >= coeff_count_)
             {
-                throw std::out_of_range("length must be non-negative and start_coeff + length - 1 must be within [0, coeff_count)");
+                throw std::out_of_range(
+                    "length must be non-negative and start_coeff + length - 1 must be within [0, coeff_count)");
             }
             std::fill_n(data_.begin() + start_coeff, length, pt_coeff_type(0));
         }
@@ -305,9 +350,9 @@ namespace seal
         @param[in] start_coeff The index of the first coefficient to set to zero
         @throws std::out_of_range if start_coeff is not within [0, coeff_count)
         */
-        inline void set_zero(size_type start_coeff)
+        inline void set_zero(std::size_t start_coeff)
         {
-            if (start_coeff >= coeff_count())
+            if (start_coeff >= coeff_count_)
             {
                 throw std::out_of_range("start_coeff must be within [0, coeff_count)");
             }
@@ -323,9 +368,17 @@ namespace seal
         }
 
         /**
+        Returns a reference to the backing DynArray object.
+        */
+        SEAL_NODISCARD inline const auto &dyn_array() const noexcept
+        {
+            return data_;
+        }
+
+        /**
         Returns a pointer to the beginning of the plaintext polynomial.
         */
-        inline pt_coeff_type *data()
+        SEAL_NODISCARD inline pt_coeff_type *data()
         {
             return data_.begin();
         }
@@ -333,27 +386,25 @@ namespace seal
         /**
         Returns a const pointer to the beginning of the plaintext polynomial.
         */
-        inline const pt_coeff_type *data() const
+        SEAL_NODISCARD inline const pt_coeff_type *data() const
         {
             return data_.cbegin();
         }
-#ifdef SEAL_USE_MSGSL_SPAN
+#ifdef SEAL_USE_MSGSL
         /**
         Returns a span pointing to the beginning of the text polynomial.
         */
-        inline gsl::span<pt_coeff_type> data_span()
+        SEAL_NODISCARD inline gsl::span<pt_coeff_type> data_span()
         {
-            return gsl::span<pt_coeff_type>(data_.begin(),
-                static_cast<std::ptrdiff_t>(coeff_count()));
+            return gsl::span<pt_coeff_type>(data_.begin(), coeff_count_);
         }
 
         /**
         Returns a span pointing to the beginning of the text polynomial.
         */
-        inline gsl::span<const pt_coeff_type> data_span() const
+        SEAL_NODISCARD inline gsl::span<const pt_coeff_type> data_span() const
         {
-            return gsl::span<const pt_coeff_type>(data_.cbegin(),
-                static_cast<std::ptrdiff_t>(coeff_count()));
+            return gsl::span<const pt_coeff_type>(data_.cbegin(), coeff_count_);
         }
 #endif
         /**
@@ -362,13 +413,13 @@ namespace seal
         @param[in] coeff_index The index of the coefficient in the plaintext polynomial
         @throws std::out_of_range if coeff_index is not within [0, coeff_count)
         */
-        inline pt_coeff_type *data(size_type coeff_index)
+        SEAL_NODISCARD inline pt_coeff_type *data(std::size_t coeff_index)
         {
-            if (coeff_count() == 0)
+            if (!coeff_count_)
             {
                 return nullptr;
             }
-            if (coeff_index >= coeff_count())
+            if (coeff_index >= coeff_count_)
             {
                 throw std::out_of_range("coeff_index must be within [0, coeff_count)");
             }
@@ -380,13 +431,13 @@ namespace seal
 
         @param[in] coeff_index The index of the coefficient in the plaintext polynomial
         */
-        inline const pt_coeff_type *data(size_type coeff_index) const
+        SEAL_NODISCARD inline const pt_coeff_type *data(std::size_t coeff_index) const
         {
-            if (coeff_count() == 0)
+            if (!coeff_count_)
             {
                 return nullptr;
             }
-            if (coeff_index >= coeff_count())
+            if (coeff_index >= coeff_count_)
             {
                 throw std::out_of_range("coeff_index must be within [0, coeff_count)");
             }
@@ -399,7 +450,7 @@ namespace seal
         @param[in] coeff_index The index of the coefficient in the plaintext polynomial
         @throws std::out_of_range if coeff_index is not within [0, coeff_count)
         */
-        inline const pt_coeff_type &operator [](size_type coeff_index) const
+        SEAL_NODISCARD inline const pt_coeff_type &operator[](std::size_t coeff_index) const
         {
             return data_.at(coeff_index);
         }
@@ -410,7 +461,7 @@ namespace seal
         @param[in] coeff_index The index of the coefficient in the plaintext polynomial
         @throws std::out_of_range if coeff_index is not within [0, coeff_count)
         */
-        inline pt_coeff_type &operator [](size_type coeff_index)
+        SEAL_NODISCARD inline pt_coeff_type &operator[](std::size_t coeff_index)
         {
             return data_.at(coeff_index);
         }
@@ -421,24 +472,20 @@ namespace seal
 
         @param[in] compare The plaintext to compare against
         */
-        inline bool operator ==(const Plaintext &compare) const
+        SEAL_NODISCARD inline bool operator==(const Plaintext &compare) const
         {
             std::size_t sig_coeff_count = significant_coeff_count();
             std::size_t sig_coeff_count_compare = compare.significant_coeff_count();
-            bool parms_id_compare = (is_ntt_form() && compare.is_ntt_form()
-                && (parms_id_ == compare.parms_id_)) ||
-                (!is_ntt_form() && !compare.is_ntt_form());
-            return parms_id_compare
-                && (sig_coeff_count == sig_coeff_count_compare)
-                && std::equal(data_.cbegin(),
-                    data_.cbegin() + sig_coeff_count,
-                    compare.data_.cbegin(),
-                    compare.data_.cbegin() + sig_coeff_count)
-                && std::all_of(data_.cbegin() + sig_coeff_count,
-                    data_.cend(), util::is_zero<pt_coeff_type>)
-                && std::all_of(compare.data_.cbegin() + sig_coeff_count,
-                    compare.data_.cend(), util::is_zero<pt_coeff_type>)
-                && util::are_close(scale_, compare.scale_);
+            bool parms_id_compare = (is_ntt_form() && compare.is_ntt_form() && (parms_id_ == compare.parms_id_)) ||
+                                    (!is_ntt_form() && !compare.is_ntt_form());
+            return parms_id_compare && (sig_coeff_count == sig_coeff_count_compare) &&
+                   std::equal(
+                       data_.cbegin(), data_.cbegin() + sig_coeff_count, compare.data_.cbegin(),
+                       compare.data_.cbegin() + sig_coeff_count) &&
+                   std::all_of(data_.cbegin() + sig_coeff_count, data_.cend(), util::is_zero<pt_coeff_type>) &&
+                   std::all_of(
+                       compare.data_.cbegin() + sig_coeff_count, compare.data_.cend(), util::is_zero<pt_coeff_type>) &&
+                   util::are_close(scale_, compare.scale_);
         }
 
         /**
@@ -447,25 +494,23 @@ namespace seal
 
         @param[in] compare The plaintext to compare against
         */
-        inline bool operator !=(const Plaintext &compare) const
+        SEAL_NODISCARD inline bool operator!=(const Plaintext &compare) const
         {
-            return !operator ==(compare);
+            return !operator==(compare);
         }
 
         /**
         Returns whether the current plaintext polynomial has all zero coefficients.
         */
-        inline bool is_zero() const
+        SEAL_NODISCARD inline bool is_zero() const
         {
-            return (coeff_count() == 0) ||
-                std::all_of(data_.cbegin(), data_.cend(),
-                    util::is_zero<pt_coeff_type>);
+            return !coeff_count_ || std::all_of(data_.cbegin(), data_.cend(), util::is_zero<pt_coeff_type>);
         }
 
         /**
         Returns the capacity of the current allocation.
         */
-        inline size_type capacity() const noexcept
+        SEAL_NODISCARD inline std::size_t capacity() const noexcept
         {
             return data_.capacity();
         }
@@ -473,33 +518,33 @@ namespace seal
         /**
         Returns the coefficient count of the current plaintext polynomial.
         */
-        inline size_type coeff_count() const noexcept
+        SEAL_NODISCARD inline std::size_t coeff_count() const noexcept
         {
-            return data_.size();
+            return coeff_count_;
         }
 
         /**
         Returns the significant coefficient count of the current plaintext polynomial.
         */
-        inline size_type significant_coeff_count() const
+        SEAL_NODISCARD inline std::size_t significant_coeff_count() const
         {
-            if (coeff_count() == 0)
+            if (!coeff_count_)
             {
                 return 0;
             }
-            return util::get_significant_uint64_count_uint(data_.cbegin(), coeff_count());
+            return util::get_significant_uint64_count_uint(data_.cbegin(), coeff_count_);
         }
 
         /**
         Returns the non-zero coefficient count of the current plaintext polynomial.
         */
-        inline size_type nonzero_coeff_count() const
+        SEAL_NODISCARD inline std::size_t nonzero_coeff_count() const
         {
-            if (coeff_count() == 0)
+            if (!coeff_count_)
             {
                 return 0;
             }
-            return util::get_nonzero_uint64_count_uint(data_.cbegin(), coeff_count());
+            return util::get_nonzero_uint64_count_uint(data_.cbegin(), coeff_count_);
         }
 
         /**
@@ -522,23 +567,55 @@ namespace seal
 
         @throws std::invalid_argument if the plaintext is in NTT transformed form
         */
-        inline std::string to_string() const
+        SEAL_NODISCARD inline std::string to_string() const
         {
             if (is_ntt_form())
             {
                 throw std::invalid_argument("cannot convert NTT transformed plaintext to string");
             }
-            return util::poly_to_hex_string(data_.cbegin(), coeff_count(), 1);
+            return util::poly_to_hex_string(data_.cbegin(), coeff_count_, 1);
+        }
+
+        /**
+        Returns an upper bound on the size of the plaintext, as if it was written
+        to an output stream.
+
+        @param[in] compr_mode The compression mode
+        @throws std::invalid_argument if the compression mode is not supported
+        @throws std::logic_error if the size does not fit in the return type
+        */
+        SEAL_NODISCARD inline std::streamoff save_size(
+            compr_mode_type compr_mode = Serialization::compr_mode_default) const
+        {
+            std::size_t members_size = Serialization::ComprSizeEstimate(
+                util::add_safe(
+                    sizeof(parms_id_),
+                    sizeof(std::uint64_t), // coeff_count_
+                    sizeof(scale_), util::safe_cast<std::size_t>(data_.save_size(compr_mode_type::none))),
+                compr_mode);
+
+            return util::safe_cast<std::streamoff>(util::add_safe(sizeof(Serialization::SEALHeader), members_size));
         }
 
         /**
         Saves the plaintext to an output stream. The output is in binary format
         and not human-readable. The output stream must have the "binary" flag set.
 
-        @param[in] stream The stream to save the plaintext to
-        @throws std::exception if the plaintext could not be written to stream
+        @param[out] stream The stream to save the plaintext to
+        @param[in] compr_mode The desired compression mode
+        @throws std::invalid_argument if the compression mode is not supported
+        @throws std::logic_error if the data to be saved is invalid, or if
+        compression failed
+        @throws std::runtime_error if I/O operations failed
         */
-        void save(std::ostream &stream) const;
+        inline std::streamoff save(
+            std::ostream &stream, compr_mode_type compr_mode = Serialization::compr_mode_default) const
+        {
+            using namespace std::placeholders;
+            return Serialization::Save(
+                std::bind(&Plaintext::save_members, this, _1), save_size(compr_mode_type::none), stream, compr_mode,
+                false);
+        }
 
         /**
         Loads a plaintext from an input stream overwriting the current plaintext.
@@ -546,10 +623,18 @@ namespace seal
         parameters is performed. This function should not be used unless the
         plaintext comes from a fully trusted source.
 
+        @param[in] context The SEALContext
         @param[in] stream The stream to load the plaintext from
-        @throws std::exception if a valid plaintext could not be read from stream
+        @throws std::invalid_argument if the encryption parameters are not valid
+        @throws std::logic_error if the data cannot be loaded by this version of
+        Microsoft SEAL, if the loaded data is invalid, or if decompression failed
+        @throws std::runtime_error if I/O operations failed
         */
-        void unsafe_load(std::istream &stream);
+        inline std::streamoff unsafe_load(const SEALContext &context, std::istream &stream)
+        {
+            using namespace std::placeholders;
+            return Serialization::Load(std::bind(&Plaintext::load_members, this, context, _1, _2), stream, false);
+        }
 
         /**
         Loads a plaintext from an input stream overwriting the current plaintext.
@@ -557,69 +642,135 @@ namespace seal
 
         @param[in] context The SEALContext
         @param[in] stream The stream to load the plaintext from
-        @throws std::invalid_argument if the context is not set or encryption
-        parameters are not valid
-        @throws std::exception if a valid plaintext could not be read from stream
-        @throws std::invalid_argument if the loaded plaintext is invalid for the
-        context
+        @throws std::invalid_argument if the encryption parameters are not valid
+        @throws std::logic_error if the data cannot be loaded by this version of
+        Microsoft SEAL, if the loaded data is invalid, or if decompression failed
+        @throws std::runtime_error if I/O operations failed
         */
-        inline void load(std::shared_ptr<SEALContext> context,
-            std::istream &stream)
+        inline std::streamoff load(const SEALContext &context, std::istream &stream)
         {
             Plaintext new_data(pool());
-            new_data.unsafe_load(stream);
-            if (!is_valid_for(new_data, std::move(context)))
+            auto in_size = new_data.unsafe_load(context, stream);
+            if (!is_valid_for(new_data, context))
             {
-                throw std::invalid_argument("Plaintext data is invalid");
+                throw std::logic_error("Plaintext data is invalid");
             }
             std::swap(*this, new_data);
+            return in_size;
+        }
+
+        /**
+        Saves the plaintext to a given memory location. The output is in binary
+        format and not human-readable.
+
+        @param[out] out The memory location to write the plaintext to
+        @param[in] size The number of bytes available in the given memory location
+        @param[in] compr_mode The desired compression mode
+        @throws std::invalid_argument if out is null or if size is too small to
+        contain a SEALHeader, or if the compression mode is not supported
+        @throws std::logic_error if the data to be saved is invalid, or if
+        compression failed
+        @throws std::runtime_error if I/O operations failed
+        */
+        inline std::streamoff save(
+            seal_byte *out, std::size_t size, compr_mode_type compr_mode = Serialization::compr_mode_default) const
+        {
+            using namespace std::placeholders;
+            return Serialization::Save(
+                std::bind(&Plaintext::save_members, this, _1), save_size(compr_mode_type::none), out, size, compr_mode,
+                false);
+        }
+
+        /**
+        Loads a plaintext from a given memory location overwriting the current
+        plaintext. No checking of the validity of the plaintext data against
+        encryption parameters is performed. This function should not be used
+        unless the plaintext comes from a fully trusted source.
+
+        @param[in] context The SEALContext
+        @param[in] in The memory location to load the plaintext from
+        @param[in] size The number of bytes available in the given memory location
+        @throws std::invalid_argument if the encryption parameters are not valid
+        @throws std::invalid_argument if in is null or if size is too small to
+        contain a SEALHeader
+        @throws std::logic_error if the data cannot be loaded by this version of
+        Microsoft SEAL, if the loaded data is invalid, or if decompression failed
+        @throws std::runtime_error if I/O operations failed
+        */
+        inline std::streamoff unsafe_load(const SEALContext &context, const seal_byte *in, std::size_t size)
+        {
+            using namespace std::placeholders;
+            return Serialization::Load(std::bind(&Plaintext::load_members, this, context, _1, _2), in, size, false);
+        }
+
+        /**
+        Loads a plaintext from an input stream overwriting the current plaintext.
+        The loaded plaintext is verified to be valid for the given SEALContext.
+
+        @param[in] context The SEALContext
+        @param[in] in The memory location to load the PublicKey from
+        @param[in] size The number of bytes available in the given memory location
+        @throws std::invalid_argument if the encryption parameters are not valid
+        @throws std::invalid_argument if in is null or if size is too small to
+        contain a SEALHeader
+        @throws std::logic_error if the data cannot be loaded by this version of
+        Microsoft SEAL, if the loaded data is invalid, or if decompression failed
+        @throws std::runtime_error if I/O operations failed
+        */
+        inline std::streamoff load(const SEALContext &context, const seal_byte *in, std::size_t size)
+        {
+            Plaintext new_data(pool());
+            auto in_size = new_data.unsafe_load(context, in, size);
+            if (!is_valid_for(new_data, context))
+            {
+                throw std::logic_error("Plaintext data is invalid");
+            }
+            std::swap(*this, new_data);
+            return in_size;
         }
 
         /**
         Returns whether the plaintext is in NTT form.
         */
-        inline bool is_ntt_form() const noexcept
+        SEAL_NODISCARD inline bool is_ntt_form() const noexcept
         {
             return (parms_id_ != parms_id_zero);
         }
 
         /**
-        Returns a reference to parms_id. The parms_id must remain zero unless the
-        plaintext polynomial is in NTT form.
+        Returns a reference to parms_id. The parms_id must remain zero unless the plaintext polynomial is in NTT form.
 
         @see EncryptionParameters for more information about parms_id.
         */
-        inline auto &parms_id() noexcept
+        SEAL_NODISCARD inline parms_id_type &parms_id() noexcept
         {
             return parms_id_;
         }
 
         /**
-        Returns a const reference to parms_id. The parms_id must remain zero unless
-        the plaintext polynomial is in NTT form.
+        Returns a const reference to parms_id. The parms_id must remain zero unless the plaintext polynomial is in NTT
+        form.
 
         @see EncryptionParameters for more information about parms_id.
         */
-        inline auto &parms_id() const noexcept
+        SEAL_NODISCARD inline const parms_id_type &parms_id() const noexcept
         {
             return parms_id_;
         }
 
         /**
-        Returns a reference to the scale. This is only needed when using the CKKS
-        encryption scheme. The user should have little or no reason to ever change
-        the scale by hand.
+        Returns a reference to the scale. This is only needed when using the CKKS encryption scheme. The user should
+        have little or no reason to ever change the scale by hand.
         */
-        inline auto &scale() noexcept
+        SEAL_NODISCARD inline double &scale() noexcept
         {
             return scale_;
         }
 
         /**
-        Returns a constant reference to the scale. This is only needed when using
-        the CKKS encryption scheme.
+        Returns a constant reference to the scale. This is only needed when using the CKKS encryption scheme.
         */
-        inline auto &scale() const noexcept
+        SEAL_NODISCARD inline const double &scale() const noexcept
         {
             return scale_;
         }
@@ -627,21 +778,30 @@ namespace seal
         /**
         Returns the currently used MemoryPoolHandle.
         */
-        inline MemoryPoolHandle pool() const noexcept
+        SEAL_NODISCARD inline MemoryPoolHandle pool() const noexcept
         {
             return data_.pool();
         }
 
         /**
-        Enables access to private members of seal::Plaintext for .NET wrapper.
+        Enables access to private members of seal::Plaintext for SEAL_C.
         */
         struct PlaintextPrivateHelper;
 
     private:
+        void save_members(std::ostream &stream) const;
+
+        void load_members(const SEALContext &context, std::istream &stream, SEALVersion version);
+
         parms_id_type parms_id_ = parms_id_zero;
+
+        std::size_t coeff_count_ = 0;
 
         double scale_ = 1.0;
 
-        IntArray<pt_coeff_type> data_;
+        DynArray<pt_coeff_type> data_;
+
+        // SecretKey needs access to save_members/load_members
+        friend class SecretKey;
     };
-}
+} // namespace seal

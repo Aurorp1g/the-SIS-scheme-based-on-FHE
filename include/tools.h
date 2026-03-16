@@ -136,17 +136,27 @@ void printError(Error& err) {
   cout.copyfmt(old_fmt);
 }
 
-void outPutCiphertext(vector<Ciphertext>& text, string filePre) {
+inline void outPutCiphertext(const std::vector<seal::Ciphertext>& text,
+                             const std::string& filePre,
+                             std::shared_ptr<seal::SEALContext> context)
+{
+    if (text.empty()) return;
 
-  cout << "the coeff_mod_count is: " << text[0].coeff_mod_count() <<
-    "\n the poly_modulus_degree is: " << text[0].poly_modulus_degree()<<endl;
+    /* 从上下文拿参数，而不再调 ct 的成员函数 */
+    auto parms_id   = text[0].parms_id();
+    auto ctx_data   = context->get_context_data(parms_id);
+    auto coeff_cnt  = ctx_data->parms().coeff_modulus().size();
+    auto poly_degree= ctx_data->parms().poly_modulus_degree();
 
-  for (size_t i = 0; i < text.size(); i++) {
-    string temName = filePre + to_string(i) + ".txt";
-    fstream out(temName, ios::out|ios::binary);
-    text[i].save(out);
-    out.close();
-  }
+    std::cout << "coeff_mod_count = " << coeff_cnt
+              << "\npoly_modulus_degree = " << poly_degree << "\n";
+
+    for (size_t i = 0; i < text.size(); ++i) {
+        std::string fname = filePre + std::to_string(i) + ".txt";
+        std::ofstream out(fname, std::ios::out | std::ios::binary);
+        text[i].save(out);
+        out.close();
+    }
 }
 
 void outPutCiphertext(vector<Plaintext>& text, string filePre) {

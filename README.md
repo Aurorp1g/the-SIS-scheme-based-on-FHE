@@ -6,3 +6,7 @@ the CKKS/BFV realization of SIS
 1. install Visual Studio 2019 or laetes level
 2. install c++ libraray seal in visual studio 2019, seal is base function library implementing FHE.
 3. load the project and the entry file for the project is CKKS.cpp.
+
+# Update
+seal：4.1.2
+

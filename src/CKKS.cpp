@@ -445,8 +445,8 @@ int main_test() {
 
   double scale = pow(2.0, 40);
 
-  // 修复：使用 shared_ptr 而非栈对象，与其他函数保持一致
-  auto context = std::make_shared<seal::SEALContext>(parms);
+  // 修复：使用 sec_level_type::none 禁用安全级别验证
+  auto context = std::make_shared<SEALContext>(parms, true, sec_level_type::none);
 
   KeyGenerator keygen(*context);
   PublicKey public_key;

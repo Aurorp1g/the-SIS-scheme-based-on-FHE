@@ -58,7 +58,7 @@ inline void getShareByHE(std::size_t poly_modulus_degree,
     seal_parms.set_coeff_modulus(seal::CoeffModulus::BFVDefault(poly_modulus_degree));
     seal_parms.set_plain_modulus(plain_mod);
 
-    auto ctx = std::make_shared<seal::SEALContext>(seal_parms);
+    auto ctx = std::make_shared<seal::SEALContext>(seal_parms, true, sec_level_type::none);
     seal::KeyGenerator keygen(*ctx);
     seal::PublicKey pk;
     keygen.create_public_key(pk);
@@ -139,7 +139,7 @@ inline Picture recoryShare(Params& picParms,
     seal_parms.set_coeff_modulus(seal::CoeffModulus::BFVDefault(degree));
     seal_parms.set_plain_modulus(plain_mod);
 
-    auto ctx = std::make_shared<seal::SEALContext>(seal_parms);
+    auto ctx = std::make_shared<seal::SEALContext>(seal_parms, true, sec_level_type::none);
     seal::KeyGenerator keygen(*ctx);
     seal::PublicKey pk;
     keygen.create_public_key(pk);
@@ -216,7 +216,7 @@ inline void getShareByCKKS(std::size_t poly_modulus_degree,
     bit_sizes.front() = bit_sizes.back() = std::min(parms.getBaseLenOfModulus() + 20, 60);
     seal_parms.set_coeff_modulus(seal::CoeffModulus::Create(poly_modulus_degree, bit_sizes));
 
-    auto ctx = std::make_shared<seal::SEALContext>(seal_parms);
+    auto ctx = std::make_shared<seal::SEALContext>(seal_parms, true, sec_level_type::none);
     seal::KeyGenerator keygen(*ctx);
     seal::PublicKey pk;
     keygen.create_public_key(pk);
@@ -312,7 +312,7 @@ inline Picture recoryShareCKKS(Params& picParms,
     bit_sizes.front() = bit_sizes.back() = std::min(picParms.getBaseLenOfModulus() + 20, 60);
     seal_parms.set_coeff_modulus(seal::CoeffModulus::Create(degree, bit_sizes));
 
-    auto ctx = std::make_shared<seal::SEALContext>(seal_parms);
+    auto ctx = std::make_shared<seal::SEALContext>(seal_parms, true, sec_level_type::none);
     seal::KeyGenerator keygen(*ctx);
     seal::PublicKey pk;
     keygen.create_public_key(pk);
@@ -394,7 +394,7 @@ inline void getShareByBFV(std::size_t poly_modulus_degree,
     seal_parms.set_coeff_modulus(seal::CoeffModulus::BFVDefault(poly_modulus_degree));
     seal_parms.set_plain_modulus(seal::PlainModulus::Batching(poly_modulus_degree, 40));
 
-    auto context = std::make_shared<seal::SEALContext>(seal_parms);
+    auto context = std::make_shared<seal::SEALContext>(seal_parms, true, sec_level_type::none);
     seal::KeyGenerator keygen(*context);
     seal::PublicKey pk;
     keygen.create_public_key(pk);
@@ -495,7 +495,7 @@ inline Picture recoryShareBFV(Params& picParms,
     seal_parms.set_coeff_modulus(seal::CoeffModulus::BFVDefault(degree));
     seal_parms.set_plain_modulus(seal::PlainModulus::Batching(degree, 40));
 
-    auto context = std::make_shared<seal::SEALContext>(seal_parms);
+    auto context = std::make_shared<seal::SEALContext>(seal_parms, true, sec_level_type::none);
     seal::KeyGenerator keygen(*context);
     seal::PublicKey pk;
     keygen.create_public_key(pk);

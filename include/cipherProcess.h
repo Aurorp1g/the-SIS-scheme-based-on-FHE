@@ -238,6 +238,8 @@ inline void getShareByCKKS(std::size_t poly_modulus_degree,
 
     std::cout << "encoding original Pictures:\n";
     clock_t st = clock();
+    size_t slot_count = encoder.slot_count();
+    size_t x_size = pixes[0].size();
     seal::Plaintext y_plain;
     seal::Ciphertext y_en;
     for (int i = 0; i < K; ++i) {
@@ -247,11 +249,14 @@ inline void getShareByCKKS(std::size_t poly_modulus_degree,
     }
     auto pixes_en = source.getSecEn();
 
-    seal::Plaintext pt;
-    seal::Ciphertext ct;
     for (std::size_t i = 0; i < shares.size(); ++i) {
-        encoder.encode(std::vector<double>{ static_cast<double>(shares[i].X[0]) },
-                       parms.getScale(), pt);
+        std::vector<double> Xvec(slot_count, 0.0);
+        for (size_t j = 0; j < x_size; ++j) {
+            Xvec[j] = static_cast<double>(shares[i].X[0]);
+        }
+        seal::Plaintext pt;
+        seal::Ciphertext ct;
+        encoder.encode(Xvec, parms.getScale(), pt);
         encryptor.encrypt(pt, ct);
         shares[i].x_en.push_back(ct);
     }
@@ -328,11 +333,28 @@ inline Picture recoryShareCKKS(Params& picParms,
     /* 本地重新加密 */
     std::cout << "Start to encode the local shares:\nwaiting....\n";
     clock_t start = clock();
+    size_t slot_count = encoder.slot_count();
+    size_t x_size = uploadShares[0].fx.size();
     for (auto& sh : uploadShares) {
-        sh.temVec.assign(sh.fx.begin(), sh.fx.end());
-        seal::Plaintext pt;
-        encoder.encode(sh.temVec, picParms.getScale(), pt);
-        encryptor.encrypt(pt, sh.fx_en[0]);
+        // 重新加密 x，铺满有效 slot
+        std::vector<double> Xvec(slot_count, 0.0);
+        for (size_t j = 0; j < x_size; ++j) {
+            Xvec[j] = static_cast<double>(sh.X[0]);
+        }
+        seal::Plaintext x_pt;
+        encoder.encode(Xvec, picParms.getScale(), x_pt);
+        if (sh.x_en.empty()) sh.x_en.emplace_back();
+        encryptor.encrypt(x_pt, sh.x_en[0]);
+
+        // 重新加密 fx，铺满有效 slot
+        std::vector<double> Yvec(slot_count, 0.0);
+        for (size_t j = 0; j < sh.fx.size(); ++j) {
+            Yvec[j] = static_cast<double>(sh.fx[j]);
+        }
+        seal::Plaintext y_pt;
+        encoder.encode(Yvec, picParms.getScale(), y_pt);
+        if (sh.fx_en.empty()) sh.fx_en.emplace_back();
+        encryptor.encrypt(y_pt, sh.fx_en[0]);
     }
     clock_t end = clock();
     double dur = static_cast<double>(end - start) / CLOCKS_PER_SEC;
@@ -346,13 +368,16 @@ inline Picture recoryShareCKKS(Params& picParms,
     for (size_t group = 0; group < uploadShares[0].fx.size(); ++group) {
         std::vector<seal::Ciphertext> X, Ys;
         for (auto& sh : uploadShares) {
-            X.push_back(sh.x_en[group]);
-            Ys.push_back(sh.fx_en[group]);
+            X.push_back(sh.x_en[0]);
+            Ys.push_back(sh.fx_en[0]);
         }
         
+        std::vector<double> invKT_vec(slot_count, 0.0);
+        for (size_t j = 0; j < x_size; ++j) {
+            invKT_vec[j] = static_cast<double>(tools.invKT[group]);
+        }
         seal::Plaintext invKT_plain;
-        encoder.encode(std::vector<double>{ static_cast<double>(tools.invKT[group]) },
-                       picParms.getScale(), invKT_plain);
+        encoder.encode(invKT_vec, picParms.getScale(), invKT_plain);
         seal::Ciphertext invKT_en;
         encryptor.encrypt(invKT_plain, invKT_en);
 

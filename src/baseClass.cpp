@@ -76,22 +76,19 @@ Norm::Norm(BatchEncoder& encoder, Encryptor& encryptor, Params& parms) {
 Norm::Norm(CKKSEncoder& encoder, Encryptor& encryptor, Evaluator& evaluator,
            RelinKeys& relin_keys, Params& parms) {
     modP = parms.getP();
-    Ciphertext tem;
     for (int i = 0; i <= parms.getMaxLevel(); ++i) ONES.emplace_back();
     Plaintext one, zero, p_plain;
     encoder.encode(1.0, parms.getScale(), one);
     encoder.encode(0.0, parms.getScale(), zero);
     encoder.encode(static_cast<double>(modP), parms.getScale(), p_plain);
-    encryptor.encrypt(one, tem);
+    encryptor.encrypt(one, ONES[parms.getMaxLevel()]);
     encryptor.encrypt(zero, ZERO);
     encryptor.encrypt(p_plain, P_sen);
-    for (int i = parms.getMaxLevel(); i >= 0; --i) {
-        ONES[i] = tem;
-        if (i != 0) {
-            evaluator.multiply_inplace(tem, tem);
-            evaluator.relinearize_inplace(tem, relin_keys);
-            evaluator.rescale_to_next_inplace(tem);
-        }
+    for (int i = parms.getMaxLevel() - 1; i >= 0; --i) {
+        ONES[i] = ONES[i + 1];
+        evaluator.multiply_inplace(ONES[i], ONES[i]);
+        evaluator.relinearize_inplace(ONES[i], relin_keys);
+        evaluator.rescale_to_next_inplace(ONES[i]);
     }
 }
 
